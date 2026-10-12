@@ -9,8 +9,10 @@ import { z } from 'zod';
 import { dateSchema } from './core/dates.js';
 import { AppError } from './core/model.js';
 import type { Runtime } from './runtime.js';
+import { settingsRoutes } from './settings/routes.js';
+import type { Probe } from './settings/probe.js';
 
-export function createApp(runtime: Runtime) {
+export function createApp(runtime: Runtime, settingsProbe?: Probe) {
   const app = new Hono();
   app.use('*', compress());
   app.use('*', async (c, next) => {
@@ -24,6 +26,8 @@ export function createApp(runtime: Runtime) {
     await next();
   });
   app.onError((error, c) => c.json({ error: error instanceof AppError ? error.code : error instanceof z.ZodError ? 'INPUT_INVALID' : 'LOCAL_OPERATION_FAILED' }, error instanceof AppError && error.code.endsWith('NOT_FOUND') ? 404 : 400));
+  app.use('/api/*', async (_c, next) => { await runtime.connections.reload(); await next(); });
+  app.route('/api/settings', settingsRoutes(runtime, settingsProbe));
   app.get('/api/projects', (c) => c.json({ mode: runtime.demo ? 'demo' : 'live', projects: runtime.config.projects.map((p) => ({ id: p.id, name: p.name, timezone: p.timezone })) }));
   app.get('/api/status', async (c) => c.json((await runtime.queries(c.req.query('project') ?? '')).status()));
   app.get('/api/menu', async (c) => c.json((await runtime.queries(c.req.query('project') ?? '')).menu()));

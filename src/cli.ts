@@ -9,7 +9,7 @@ import { startServer } from './server.js';
 const optionsSchema = z.object({ config: z.string().optional(), dataDir: z.string().optional(), demo: z.boolean().optional(),
   demoAt: dateSchema.optional(), project: z.string().default('demo'), json: z.boolean().default(false),
   month: z.string().optional(), at: dateSchema.optional(), release: z.string().optional(), port: z.coerce.number().int().min(0).max(65535).default(4317) });
-const program = new Command().name('release-calendar').description('Read-only local Jira Cloud / GitHub calendar. No config defaults to fictional demo.').version('0.1.0');
+const program = new Command().name('release-calendar').description('Read-only local Jira Cloud / GitHub calendar. Uses saved local connections, or fictional demo when unconfigured.').version('0.1.0');
 for (const name of ['status', 'calendar', 'release', 'guide', 'sync', 'serve']) {
   const command = program.command(name).option('--config <path>', 'Local configuration JSON; enables live mode')
     .option('--data-dir <path>', 'Local cache and observation directory').option('--demo', 'Fictional data only')

@@ -14,3 +14,7 @@ desktop-build/
 credentials.json
 *.log
 .DS_Store
+connections.json
+*.connections.json
+*.connections.json.*
+connections.json.*

@@ -19,7 +19,7 @@ pnpm start
 
 브라우저에서 <http://127.0.0.1:4317>을 여세요. 서버를 종료하려면 실행한 터미널에서 `Ctrl+C`를 누릅니다. 다른 포트는 `pnpm cli serve --demo --port 4320`으로 지정합니다. 외부 호스팅이나 유료 자원을 생성하지 않습니다.
 
-데모는 실행 시점의 현재 월을 기준으로 생성되며 `example.com` 원문 링크와 가상 프로젝트·티켓만 사용합니다. 반복 가능한 예시는 `--demo-at 2027-03-10`으로 고정합니다. 데모의 새로고침은 가상 데이터를 다시 생성하며 실제 관측 이력을 저장하지 않습니다.
+데모는 실행 시점의 현재 월을 기준으로 생성되며 `example.com` 원문 링크와 가상 프로젝트·티켓만 사용합니다. 반복 가능한 예시는 `--demo --demo-at 2027-03-10`으로 고정합니다. 데모의 새로고침은 가상 데이터를 다시 생성하며 실제 관측 이력을 저장하지 않습니다.
 
 ## 화면
 
@@ -40,43 +40,33 @@ pnpm start
 
 ## 실제 연동
 
-설정과 인증정보는 저장소 밖에 두세요. 앱은 기존 gh 로그인이나 다른 앱의 Jira 인증을 자동으로 가져오지 않습니다.
+웹 상단 **연결 설정**, 또는 메뉴 막대 앱의 톱니바퀴 → **연결 설정…**을 누르세요. 두 화면은 같은 로컬 설정을 사용합니다. 터미널에서 JSON을 편집할 필요가 없습니다.
 
-```sh
-mkdir -p "$HOME/.config/release-calendar"
-cp examples/config.json "$HOME/.config/release-calendar/config.json"
-chmod 600 "$HOME/.config/release-calendar/config.json"
-```
+1. 연결 이름·시간대, Jira 사이트·프로젝트 키를 입력합니다.
+2. **Jira API 토큰 발급**을 눌러 발급한 토큰과 해당 계정 이메일을 입력합니다. 범위 지정 토큰은 Cloud ID도 입력합니다.
+3. GitHub를 사용할 경우 저장소와 조회용 토큰을 입력합니다. 여러 저장소를 한 줄에 하나씩 넣을 수 있습니다.
+4. **연결 확인**으로 접근 여부를 확인하고 **저장하고 동기화**를 누릅니다. 저장 이후 조회가 실패해도 설정은 남으며 실패 안내가 표시됩니다.
 
-복사한 파일의 가상 Jira 사이트·프로젝트 키·GitHub 저장소를 본인의 대상으로 수정하세요. 한 Jira 프로젝트를 여러 설정 항목으로 나누고 `releaseNameIncludes`를 다르게 지정하면 서비스별로 볼 수 있습니다. 각 항목에는 서로 다른 `id`를 사용하세요. 저장소는 여러 개 지정할 수 있습니다. 예제의 `customfield_10015`는 가상 매핑이므로 실제 필드 ID로 바꾸거나 해당 매핑을 제거하세요.
+토큰 발급·조직 승인은 서비스에서 사용자가 수행합니다. OAuth 자동 로그인은 제공하지 않으며 기존 gh 로그인이나 다른 앱의 Jira 인증을 가져오지 않습니다. 저장한 이메일·토큰은 다시 화면에 내려보내지 않고, 수정 시 비워두면 유지합니다. Jira 사이트나 Cloud ID를 바꾸면 인증정보를 다시 입력해야 합니다. **연결 해제**는 앱이 관리하는 로컬 연결·인증정보만 제거하며 원본·캐시는 변경하지 않습니다.
 
-설정 파일에는 **환경변수 이름만** 저장합니다. 해당 이름의 변수를 터미널이나 개인 비밀 관리 도구에서 주입하세요. 토큰을 명령 인수, 설정 JSON, Git 기록에 넣지 마세요.
+Jira는 프로젝트 Browse 및 티켓 조회 권한이 필요합니다. [API 토큰 공식 안내](https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/)에 따라 읽기 권한을 선택하세요. 범위 지정 토큰은 `https://api.atlassian.com/ex/jira/{cloudId}`를 사용합니다. [Cloud ID 확인 방법](https://support.atlassian.com/jira/kb/retrieve-my-atlassian-sites-cloud-id/)을 참고하세요. GitHub fine-grained 토큰에는 선택한 저장소의 **Metadata, Pull requests, Contents, Checks, Commit statuses: Read-only**를 사용합니다. [공식 권한 안내](https://docs.github.com/en/rest/authentication/permissions-required-for-fine-grained-personal-access-tokens)를 참고하세요. 관리자·쓰기 권한을 요구하지 않으며, 앱이 기존 토큰의 권한 자체를 축소하지는 않습니다.
 
-| 환경변수 예시 | 용도 |
-| --- | --- |
-| `RELEASE_JIRA_EMAIL` | 개인 Jira Cloud 계정 이메일 |
-| `RELEASE_JIRA_TOKEN` | 그 계정의 Jira API 토큰 |
-| `RELEASE_GITHUB_TOKEN` | 지정 저장소의 조회용 fine-grained 토큰 |
+연결 설정의 **일정 규칙**에서 릴리스 이름 필터·기능 마감·QA 오프셋을 설정할 수 있고 CLI용 프로젝트 ID를 확인할 수 있습니다. 여러 서비스는 연결을 나누고 이름 필터를 지정하세요. 등록한 설정은 앱·웹·CLI에 공유되며 일반 조회는 캐시를 읽습니다. 원본 조회는 저장 직후 또는 새로고침/`sync`로 실행합니다.
 
-Jira는 프로젝트 Browse 권한과 해당 티켓의 조회 권한이 필요합니다. 범위가 있는 API 토큰을 쓰면 `jira.cloudId`도 설정하며 `https://api.atlassian.com/ex/jira/{cloudId}` 경로로 요청합니다. 토큰 유형에 따라 공식 문서의 읽기 범위만 부여하세요. GitHub는 선택한 저장소에 **Metadata, Pull requests, Contents, Checks, Commit statuses: Read-only**를 사용하세요. 관리자·쓰기 권한을 요구하지 않습니다. 앱의 GET 제한과 별개로 토큰이 가진 권한 자체를 앱이 축소할 수는 없습니다.
+고급 설정은 [가상 설정 예제](examples/config.json)를 참고해 `~/.config/release-calendar/config.json` 또는 `--config <path>`로 지정할 수 있습니다. 인증은 설정의 환경변수 이름에 맞춰 주입하거나 같은 폴더의 소유자 전용 0600 `credentials.json`에 저장할 수 있습니다. UI에서 저장하면 관리 파일이 우선하며, 기존 설정·인증 파일은 자동 수정·삭제하지 않습니다. 임의 경로의 설정을 사용하면 그 경로의 `.connections.json` 보조 파일에 UI 설정을 저장합니다. 저장소 밖 경로를 사용하세요.
 
-```sh
-pnpm cli sync --config "$HOME/.config/release-calendar/config.json" --project demo --json
-pnpm cli serve --config "$HOME/.config/release-calendar/config.json"
-```
-
-설정의 `id`를 바꿨다면 `--project`도 맞추세요. `--config`를 생략하면 **데모**입니다. 실제 모드는 최초 `sync` 또는 UI 새로고침 전까지 데이터가 없습니다. 일반 조회 명령은 캐시를 읽으며 자동 동기화하지 않습니다. `sync`는 경고가 있으면 종료 코드 2, 입력/실행 오류는 1, 정상은 0입니다. 조회 명령은 오래된 데이터도 경고 필드와 함께 반환합니다.
+`--config` 없이 실행하면 저장한 로컬 연결을 사용하며, 연결이 없으면 데모입니다. 데모를 명시하려면 `--demo`를 사용하세요. `sync`는 경고가 있으면 종료 코드 2, 입력/실행 오류는 1, 정상은 0입니다. 실제 계정 연결은 직접 검증하지 않았습니다.
 
 ## CLI와 AI
 
 빌드 후 `pnpm cli` 또는 `node dist/cli.js`로 실행합니다. `release-calendar` 이름으로 PATH에 설치하려면 원하는 경우 `pnpm link --global`을 실행하세요.
 
 ```sh
-pnpm cli status --project demo --json
-pnpm cli calendar --project demo --month 2027-03 --demo-at 2027-03-10 --json
-pnpm cli guide --project demo --at 2027-03-10 --demo-at 2027-03-10 --json
-pnpm cli release 'jira:https://fictional-orbit.atlassian.net:100:1' --project demo --demo-at 2027-03-10 --json
-pnpm cli guide --project demo --at 2027-03-10 --release 'jira:https://fictional-orbit.atlassian.net:100:1' --demo-at 2027-03-10 --json
+pnpm cli status --demo --project demo --json
+pnpm cli calendar --project demo --month 2027-03 --demo --demo-at 2027-03-10 --json
+pnpm cli guide --project demo --at 2027-03-10 --demo --demo-at 2027-03-10 --json
+pnpm cli release 'jira:https://fictional-orbit.atlassian.net:100:1' --project demo --demo --demo-at 2027-03-10 --json
+pnpm cli guide --project demo --at 2027-03-10 --release 'jira:https://fictional-orbit.atlassian.net:100:1' --demo --demo-at 2027-03-10 --json
 ```
 
 `guide`에는 프로젝트·시간대·평가 날짜·릴리스별 단계·관측 상태·다음 마감·권장 작업·주의사항·근거 링크·데이터 기준 시각·부족한 정보가 있습니다. 릴리스가 겹치면 각각 반환합니다. 기본은 기준 날짜 이후의 릴리스와 날짜 미정 릴리스이며, 지난/보관 릴리스는 `--release`로 명시 조회할 수 있습니다.
@@ -109,7 +99,9 @@ GitHub 첫 수집은 지정 저장소의 PR을 전 페이지 읽기 때문에 �
 
 - 기본 데이터: `~/.local/share/release-calendar/`
 - 변경: `--data-dir <path>` 또는 `RELEASE_CALENDAR_DATA_DIR`
-- 설정: `--config <path>`로 명시한 JSON. 예제 권장 위치는 `~/.config/release-calendar/config.json`입니다.
+- 화면에서 저장한 연결·인증정보: `~/.config/release-calendar/connections.json` (0600, 평문). 앱·웹·CLI가 공유합니다.
+- 고급 설정: `--config <path>` 또는 기본 `~/.config/release-calendar/config.json`. 명시한 경로의 UI 설정은 `<path>.connections.json`에 저장됩니다. 관리 파일이 기존 JSON보다 우선합니다.
+- 이전 방식의 `credentials.json`은 이관 후에도 남습니다. 완전히 제거하려면 기존 파일과 환경변수도 직접 정리하세요.
 - 프로젝트 설정의 해시별로 캐시를 분리하여 연결/규칙 변경 후 예전 데이터를 새 설정으로 오해하지 않습니다.
 - 파일은 0600, 새 데이터 디렉터리는 0700으로 생성합니다. 암호화 저장은 제공하지 않으므로 OS 계정과 디스크 보호를 사용하세요.
 
@@ -125,6 +117,7 @@ Node.js LTS와 TypeScript를 선택해 서버·CLI·달력 모델을 공유하�
 pnpm check
 pnpm test
 pnpm test:browser
+pnpm test:settings
 ```
 
 브라우저 검증은 설치된 Chrome을 별도 자동화 프로필로 사용하고 `finally`에서 닫습니다. Chrome이 없으면 `pnpm exec playwright install chromium` 후 `QA_BROWSER_CHANNEL=chromium pnpm test:browser`를 사용하세요. 테스트 증거는 Git에서 제외된 `artifacts/`에 생성됩니다. [검증 결과와 한계](docs/verification.md), [구조/API 계약](docs/architecture.md)을 참고하세요.

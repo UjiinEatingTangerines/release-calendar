@@ -8,7 +8,7 @@ extension AppDelegate {
         render()
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()
-        loadSummary(refresh: false)
+        if !loading { loadProjects() }
     }
     func render() {
         let available = (statusItem?.button?.window?.screen ?? NSScreen.main)?.visibleFrame.height ?? 800

@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var timer: Timer?
     var request: Task<Void, Never>?
     var generation = 0
+    let settingsWindow = SettingsWindow()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -32,7 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.behavior = .transient
         render(); backend.start()
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.loadSummary(refresh: false) }
+            Task { @MainActor in if self?.loading == false { self?.loadProjects() } }
         }
     }
     func applicationWillTerminate(_ notification: Notification) {
@@ -96,6 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     @objc func refreshData() { loadSummary(refresh: true) }
     @objc func restart() {
+        settingsWindow.invalidate()
         generation += 1; request?.cancel(); loading = false; summary = nil; projects = []
         backend.stop(); message = "시작 중…"; render(); backend.start()
     }
@@ -112,11 +114,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let target = webURL(release) { NSWorkspace.shared.open(target); popover.performClose(nil) }
     }
     @objc func openSettings() {
-        let folder = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/release-calendar")
-        do {
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-            NSWorkspace.shared.open(folder)
-        } catch { message = "설정 폴더를 열 수 없습니다."; render() }
+        guard let base = backend.url else { message = "서버 시작 후 설정을 열 수 있습니다."; render(); return }
+        popover.performClose(nil)
+        settingsWindow.onClose = { [weak self] in self?.loadProjects() }
+        settingsWindow.show(base: base)
     }
     @objc func openHelp() {
         if let url = Bundle.main.resourceURL?.appendingPathComponent("macos.md") { NSWorkspace.shared.open(url) }

@@ -13,6 +13,7 @@ src/cli.ts (JSON / terminal) ──────────┘                 �
 | `src/core/model.ts` | Validated provider-independent records and stable IDs |
 | `src/core/schedule.ts` | Source/derived events and weekly overlap segments |
 | `src/core/query.ts` | Status, calendar, release detail, per-release guide |
+| `src/settings/` | Local atomic connection/credential storage, revision conflict checks, read-only connection probes |
 | `src/config.ts` | Validated local connection/rule configuration; env-name references |
 | `src/connectors/` | Jira Cloud / GitHub.com endpoint schemas, complete pagination, read-only transport |
 | `src/storage.ts`, `src/sync.ts` | Config-scoped atomic file transactions, change observations, provider failure isolation |
@@ -32,13 +33,17 @@ Snapshots are unbounded locally and rewritten as one file. For large histories, 
 | GET `/api/calendar` | `project`, `month=YYYY-MM`; calendar days, events, undated releases |
 | GET `/api/release` | `project`, `id`; release, tickets, PRs, source events and app observations |
 | GET `/api/guide` | `project`, optional `at`, optional `release`; same result as CLI |
+| GET `/api/settings` | Editable settings and credential presence only; local write CSRF token |
+| POST `/api/settings/check` | Validate a draft with GET-only provider probes; no persistence |
+| POST `/api/settings/save` | Atomic local config/credential save; revision and CSRF required |
+| POST `/api/settings/remove` | Remove local managed connection and unused secrets; never provider records |
 | POST `/api/refresh` | `project`; requires `X-Release-Calendar: local`; only writes local state |
 
 JSON dates are `YYYY-MM-DD` without UTC conversion. Instants are ISO timestamps. Events carry `kind`, `start`, `end`, `source` (`jira`/`rule`), `sourceDetail`, and stable release ID. App observations use `observedAt`, never an invented provider change timestamp. `productionDeployment` is always `unknown` because no deployment evidence connector exists.
 
 Read APIs never implicitly sync. This makes CLI and UI use the same stored snapshot and calculation logic. A future MCP adapter can expose only Queries' read methods, using the same IDs, warnings, evidence and trust boundary. Other local Admin clients can use this API with same-origin hosting; broad CORS and unauthenticated public exposure are intentionally absent.
 
-The source provider text is inert data: Jira bodies/comments are not fetched; PR bodies are transiently inspected for exact keys and are not persisted. Summaries/titles remain untrusted text, rendered with `textContent`. Links are parsed as HTTPS. Authentication exists only in server-side HttpReader construction and env lookup, never in browser bundles or JSON. Errors are stable codes, not raw provider bodies or URLs with credentials.
+The source provider text is inert data: Jira bodies/comments are not fetched; PR bodies are transiently inspected for exact keys and are not persisted. Summaries/titles remain untrusted text, rendered with `textContent`. Links are parsed as HTTPS. Credentials entered into the settings form travel only in a same-origin POST to the loopback server. Saved credentials are never returned in GET/save responses, embedded in browser bundles, or placed in URLs. The server resolves private local credentials or explicitly configured environment variables for HttpReader. Errors are stable codes, not raw provider bodies or URLs with credentials.
 
 ## Extending connectors
 
@@ -47,3 +52,9 @@ Add a new collector producing the existing validated Release/Ticket/Pull records
 ## Native macOS companion
 
 `desktop/` contains an AppKit status item, SwiftUI popover, typed HTTP decoding and a Process owner. `src/desktop.ts` launches the same Hono app on an OS-assigned loopback port and loads local desktop credentials only for configured env names. An inherited stdin pipe establishes ownership: EOF/termination shuts down that app's server. The native wrapper never owns CLI-launched servers. SwiftUI cards consume `/api/menu`, which derives phases/deadlines from `Queries.guide`; there is no separate schedule engine. Web links carry validated project/release/month parameters. `scripts/build-macos.mjs` bundles server/web into an ad-hoc signed `.app`, referring to the machine's existing Node.js installation.
+
+## Shared local settings
+
+`Connections` serves web, native and CLI. A 0600 `connections.json` stores config and credentials in one atomic revision. A directory lock and optimistic revision prevent concurrent editors from overwriting each other. Host/Origin validation, a per-server CSRF header and a 64 KiB body limit protect local writes. The managed document takes precedence over legacy config; explicit config paths use a separate sidecar. Removing all managed entries persists an empty document rather than resurrecting legacy settings. Legacy source files remain untouched. Settings changes can alter the cache namespace; old observations remain on disk and new settings require fresh collection.
+
+The native settings window embeds the same web UI in nonpersistent WKWebView. External token issuance links open the normal browser. Neither surface implements OAuth registration or writes to provider APIs.

@@ -18,24 +18,13 @@ pnpm desktop
 
 ## 데모와 실제 연동
 
-`~/.config/release-calendar/config.json`이 없으면 데모입니다. 파일이 있으면 README의 공통 설정으로 실제 연동 모드를 사용합니다. 잘못된 설정은 데모로 조용히 대체하지 않고 시작 실패로 표시합니다. 하단 톱니바퀴의 **연동 설정 폴더 열기**에서 파일을 관리하고, 변경한 후 **설정 다시 읽기 / 서버 재시작**을 누르세요. `RELEASE_CALENDAR_CONFIG` 환경변수로 경로를 지정할 수도 있으나 Finder 실행에는 터미널 환경변수가 전달되지 않을 수 있습니다.
+하단 톱니바퀴의 **연결 설정…**을 누르면 앱 안에 설정 창이 열립니다. Jira 사이트·프로젝트·이메일·토큰과 선택적인 GitHub 저장소·토큰을 입력한 뒤 **연결 확인 → 저장하고 동기화**를 누르세요. 웹 상단의 **연결 설정**도 같은 화면과 저장소를 사용합니다. 토큰 발급 버튼은 해당 서비스의 공식 페이지를 기본 브라우저로 엽니다.
 
-Finder 실행을 위한 선택적 인증 파일은 설정 파일과 같은 폴더의 `credentials.json`입니다. 키는 config.json의 `emailEnv`, `tokenEnv`에 설정한 환경변수 이름과 정확히 같아야 합니다. 기존 설정 예제 기준으로 다음 모양입니다. 실제 값은 로컬에서만 넣으세요.
+연결이 없으면 데모로 시작합니다. UI에서 저장하면 실제 연결 모드로 전환됩니다. 팝오버를 다시 열거나 설정 창을 닫으면 프로젝트 목록을 다시 읽습니다. 설정 창은 macOS의 WKWebView와 비영구 웹 저장소를 사용하며 창을 닫으면 입력 화면을 폐기합니다.
 
-```json
-{
-  "RELEASE_JIRA_EMAIL": "you@example.com",
-  "RELEASE_JIRA_TOKEN": "replace-locally",
-  "RELEASE_GITHUB_TOKEN": "replace-locally"
-}
-```
+연결·인증정보는 `~/.config/release-calendar/connections.json`에 소유자 전용 0600 권한으로 저장합니다. 암호화·키체인 저장은 제공하지 않습니다. 저장한 토큰은 화면 응답에 포함하지 않고, 수정 시 빈칸은 기존 값을 유지합니다. CLI도 같은 파일을 읽습니다. **연결 해제**는 이 관리 파일의 연결과 인증정보를 제거하며 캐시와 Jira·GitHub 원본을 유지합니다.
 
-```sh
-chmod 700 "$HOME/.config/release-calendar"
-chmod 600 "$HOME/.config/release-calendar/config.json" "$HOME/.config/release-calendar/credentials.json"
-```
-
-인증 파일은 **암호화되지 않은 로컬 파일**입니다. 앱은 파일 소유자와 다른 사용자 접근 권한이 없는지 확인하고, 설정에 등록된 인증 키만 읽습니다. 키체인 저장 기능은 없습니다. 이 파일은 Git에서 제외하며 앱 번들에 복사하지 않습니다. 파일이 없으면 앱이 상속받은 환경변수를 사용하고, 둘 다 있으면 파일 값이 우선합니다. CLI는 기존처럼 환경변수를 사용하며 credentials.json을 자동으로 읽지 않습니다. 실제 값이 없는 상태에서는 새로고침 시 경고를 표시합니다. 토큰을 채팅이나 공개 저장소에 붙이지 마세요.
+기존 `config.json`·`credentials.json`과 환경변수 방식도 지원합니다. `RELEASE_CALENDAR_CONFIG`로 지정한 경로의 UI 저장은 `<path>.connections.json`을 사용합니다. 기존 파일은 자동 수정·삭제하지 않으므로 이전 인증정보까지 제거하려면 직접 정리하세요. 자세한 권한·우선순위는 README를 참고하세요. 잘못된 고급 설정 파일은 시작 오류로 표시하며 데모로 조용히 대체하지 않습니다.
 
 앱 시작과 60초 간격 갱신은 **로컬 캐시 조회**입니다. Jira/GitHub 조회는 메뉴의 **지금 새로고침** 또는 웹 새로고침으로 실행합니다. 메뉴와 웹·CLI는 같은 설정의 캐시와 Queries 로직을 공유합니다. 시간대는 프로젝트 설정을 사용하며, 기간 계산만으로 출시나 운영 배포를 완료 처리하지 않습니다.
 
@@ -43,10 +32,10 @@ chmod 600 "$HOME/.config/release-calendar/config.json" "$HOME/.config/release-ca
 
 앱은 `127.0.0.1`의 비어 있는 포트를 자동으로 배정받습니다. CLI 서버의 4317 포트나 다른 프로그램을 점유하거나 종료하지 않습니다. 웹 주소는 앱을 재시작하면 바뀔 수 있으므로 메뉴에서 여세요. 앱을 종료하면 열린 웹 탭은 남지만 해당 서버는 종료됩니다.
 
-하단 톱니바퀴의 **Release Calendar 종료**로 종료하면 앱 소유 서버도 종료됩니다. 앱이 강제 종료돼도 부모 파이프가 닫히면서 서버가 종료됩니다. 서버가 비정상 종료되면 메뉴에 오류가 나타나고 재시작할 수 있습니다. 설정을 제거하려면 로컬 config.json/credentials.json을 삭제하고 앱을 재시작하세요. 캐시 제거는 README의 로컬 데이터 안내를 따릅니다.
+하단 톱니바퀴의 **Release Calendar 종료**로 종료하면 앱 소유 서버도 종료됩니다. 앱이 강제 종료돼도 부모 파이프가 닫히면서 서버가 종료됩니다. 서버가 비정상 종료되면 메뉴에 오류가 나타나고 재시작할 수 있습니다. 연결은 설정 화면에서 해제할 수 있습니다. 로컬 파일을 직접 삭제한다면 connections.json과 사용 중인 기존 config.json/credentials.json도 확인하세요. 캐시 제거는 README의 로컬 데이터 안내를 따릅니다.
 
 ## 구현 근거
 
-macOS 기본 [NSStatusBar](https://developer.apple.com/documentation/appkit/nsstatusbar)와 [Process](https://developer.apple.com/documentation/foundation/process)를 사용합니다. 웹 열기는 [NSWorkspace](https://developer.apple.com/documentation/appkit/nsworkspace/open(_:)), 서버 번들은 [esbuild](https://esbuild.github.io/api/#bundle)를 사용합니다. 별도의 브라우저 엔진을 앱에 포함하지 않아 기존 로컬 웹과 CLI 구조를 유지합니다.
+macOS 기본 [NSStatusBar](https://developer.apple.com/documentation/appkit/nsstatusbar)와 [Process](https://developer.apple.com/documentation/foundation/process)를 사용합니다. 웹 열기는 [NSWorkspace](https://developer.apple.com/documentation/appkit/nsworkspace/open(_:)), 서버 번들은 [esbuild](https://esbuild.github.io/api/#bundle)를 사용합니다. 설정 창은 macOS에 포함된 WKWebView를 사용하여 기존 로컬 웹과 CLI 구조를 유지합니다.
 
 팝오버는 라이트·다크 모드를 따릅니다. 파란 개발, 보라 QA, 주황 마감, 초록 계획, 빨간 예정일 경과 뱃지를 사용하며 텍스트로도 상태를 표시합니다. 릴리스 목록만 스크롤하고 웹 열기와 새로고침은 하단에 유지됩니다. OpenUsage·CodexBar의 공개 UI에서 정보 위계를 참고했으며 코드를 복사하지 않았습니다. 상세 출처는 DESIGN.md에 기록했습니다.

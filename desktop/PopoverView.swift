@@ -100,7 +100,7 @@ struct PopoverView: View {
                     else { Image(systemName: "arrow.clockwise").frame(width: 32, height: 32) }
                 }.buttonStyle(.borderless).disabled(loading || !ready || selected.isEmpty).help("지금 새로고침").accessibilityLabel("지금 새로고침")
                 Menu {
-                    Button("연동 설정 폴더 열기…", action: actions.settings)
+                    Button("연결 설정…", action: actions.settings)
                     Button("설정 도움말…", action: actions.help)
                     Button("설정 다시 읽기 / 서버 재시작", action: actions.restart)
                     Divider()

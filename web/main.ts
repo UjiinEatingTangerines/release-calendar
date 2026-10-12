@@ -20,7 +20,7 @@ function render() {
   const main = node('main', '', 'page');
   const header = node('header', '', 'header');
   const identity = node('div'); identity.append(node('p', ko.eyebrow, 'eyebrow'), node('h1', ko.title), node('p', ko.subtitle, 'muted'));
-  const badge = tag(projects.mode === 'demo' ? ko.demo : ko.live, 'mode'); header.append(identity, badge); main.append(header);
+  const badge = tag(projects.mode === 'demo' ? ko.demo : ko.live, 'mode'); const actions = node('div', '', 'header-actions'); const settings = node('a', '연결 설정'); settings.href = '/settings.html'; actions.append(badge, settings); header.append(identity, actions); main.append(header);
   const controls = node('div', '', 'controls');
   const projectLabel = node('label', ko.project), projectSelect = node('select'); projectSelect.id = 'project';
   for (const p of projects.projects) { const option = node('option', p.name); option.value = p.id; projectSelect.append(option); } projectSelect.value = project;
@@ -100,3 +100,15 @@ try {
   const requestedRelease = query.get('release');
   if (requestedRelease) await selectRelease(requestedRelease);
 } catch (failure) { if (!(failure instanceof Error)) throw failure; loading = false; error = '앱을 불러오지 못했습니다. 서버와 설정을 확인한 후 페이지를 새로고침하세요.'; render(); }
+
+window.addEventListener('focus', () => {
+  void (async () => {
+    try {
+      projects = await api.projects();
+      if (!projects.projects.some((p) => p.id === project)) {
+        project = projects.projects[0]?.id ?? ''; release = ''; detail = null; data = null; detailRequest++;
+      }
+      if (project) await load();
+    } catch (failure) { if (!(failure instanceof Error)) throw failure; error = ko.failed; render(); }
+  })();
+});

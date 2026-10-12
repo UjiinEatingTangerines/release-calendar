@@ -14,17 +14,18 @@ try {
   await mkdir(join(contents, 'MacOS'), { recursive: true });
   await cp('desktop-build/Release Calendar.app/Contents/Resources', join(contents, 'Resources'), { recursive: true });
   await writeFile(join(contents, 'Info.plist'), (await readFile('desktop-build/Release Calendar.app/Contents/Info.plist', 'utf8')).replace('io.github.UjiinEatingTangerines.release-calendar', 'io.github.UjiinEatingTangerines.release-calendar.qa'));
-  execFileSync('xcrun', ['swiftc', '-O', '-parse-as-library', '-swift-version', '6', '-framework', 'AppKit',
-    'desktop/Models.swift', 'desktop/Backend.swift', 'desktop/App.swift', 'desktop/Menu.swift', 'desktop/Tokens.swift', 'desktop/PopoverView.swift', 'scripts/native-qa.swift',
+  execFileSync('xcrun', ['swiftc', '-O', '-parse-as-library', '-swift-version', '6', '-framework', 'AppKit', '-framework', 'WebKit',
+    'desktop/Models.swift', 'desktop/Backend.swift', 'desktop/App.swift', 'desktop/SettingsWindow.swift', 'desktop/Menu.swift', 'desktop/Tokens.swift', 'desktop/PopoverView.swift', 'scripts/native-qa.swift',
     '-o', join(contents, 'MacOS/ReleaseCalendar')], { stdio: 'inherit' });
   const config = join(root, 'config.json'), dataDir = join(root, 'data');
   await writeFile(config, JSON.stringify({ projects: [demoProject, { ...demoProject, id: 'empty', name: 'Empty fictional project' }] }), { mode: 0o600 });
   await new Store(dataDir, demoProject).update(async () => demoState(new Date()));
+  await mkdir('artifacts', { recursive: true });
   child = spawn(join(contents, 'MacOS/ReleaseCalendar'), [], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env,
-    RELEASE_CALENDAR_CONFIG: config, RELEASE_CALENDAR_DATA_DIR: dataDir, JIRA_EMAIL: '', JIRA_TOKEN: '', GITHUB_TOKEN: '' } });
+    QA_SETTINGS_IMAGE: resolve('artifacts/native-settings.png'), RELEASE_CALENDAR_CONFIG: config, RELEASE_CALENDAR_DATA_DIR: dataDir, JIRA_EMAIL: '', JIRA_TOKEN: '', GITHUB_TOKEN: '' } });
   let output = '', errors = '';
   child.stdout.on('data', (data) => { output += data; }); child.stderr.on('data', (data) => { errors += data; });
-  const timeout = setTimeout(() => child.kill('SIGTERM'), 25000);
+  const timeout = setTimeout(() => child.kill('SIGTERM'), 40000);
   const [code] = await once(child, 'exit'); clearTimeout(timeout);
   assert.equal(code, 0, errors);
   const result = JSON.parse(output);

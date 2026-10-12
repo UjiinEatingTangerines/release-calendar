@@ -20,7 +20,7 @@ await cp('web-dist', join(resources, 'web-dist'), { recursive: true });
 await cp('docs/macos.md', join(resources, 'macos.md'));
 await cp('examples/config.json', join(resources, 'config.example.json'));
 execFileSync('/usr/bin/xcrun', ['swiftc', '-O', '-parse-as-library', '-swift-version', '6',
-  '-framework', 'AppKit', 'desktop/Models.swift', 'desktop/Backend.swift', 'desktop/App.swift', 'desktop/Menu.swift', 'desktop/Tokens.swift', 'desktop/PopoverView.swift', 'desktop/Main.swift',
+  '-framework', 'AppKit', '-framework', 'WebKit', 'desktop/Models.swift', 'desktop/Backend.swift', 'desktop/App.swift', 'desktop/SettingsWindow.swift', 'desktop/Menu.swift', 'desktop/Tokens.swift', 'desktop/PopoverView.swift', 'desktop/Main.swift',
   '-o', join(contents, 'MacOS/ReleaseCalendar')], { stdio: 'inherit' });
 await writeFile(join(contents, 'Info.plist'), `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

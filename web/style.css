@@ -69,3 +69,5 @@ footer { margin-top:var(--space-8); font-size:var(--text-meta); color:var(--mute
   .week-events,.more { display:none; } .weekdays { min-height:var(--control-size); } .legend { gap:var(--space-1); } .tag { padding:var(--space-1) var(--space-2); } .detail-panel { padding:var(--space-4); } .agenda-event { align-items:center; }
 }
 @media (prefers-reduced-motion:reduce) { * { scroll-behavior:auto; transition:none; } }
+
+.header-actions { display:flex; align-items:center; gap:var(--space-3); flex-wrap:wrap; }
