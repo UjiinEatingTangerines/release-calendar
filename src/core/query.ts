@@ -27,6 +27,21 @@ export class Queries {
     };
   }
   calendar(month: string) { return { ...this.status(), ...calendar(this.snapshot(), this.project, month) }; }
+  menu() {
+    const status = this.status();
+    const rank = (date: string | null) => !date ? 2 : date >= status.today ? 0 : 1;
+    const pending = this.snapshot().releases.filter((r) => !r.released && !r.archived)
+      .sort((a, b) => rank(a.releaseDate) - rank(b.releaseDate)
+        || (a.releaseDate ?? '').localeCompare(b.releaseDate ?? '') * (rank(a.releaseDate) === 1 ? -1 : 1) || a.id.localeCompare(b.id));
+    return { ...status, totalPending: pending.length, releases: pending.slice(0, 6).map((release) => {
+      const guide = this.guide(status.today, release.id).releases[0];
+      if (!guide) throw new AppError('RELEASE_NOT_FOUND');
+      return { releaseId: release.id, name: release.name, releaseDate: release.releaseDate ?? null,
+        daysUntilRelease: release.releaseDate ? Math.round((Date.parse(`${release.releaseDate}T12:00:00Z`) - Date.parse(`${status.today}T12:00:00Z`)) / 86400000) : null,
+        phase: guide.phase, observed: { jiraReleased: guide.observed.jiraReleased, productionDeployment: guide.observed.productionDeployment },
+        nextDeadline: guide.nextDeadline ? { kind: guide.nextDeadline.kind, date: guide.nextDeadline.deadlineDate, source: guide.nextDeadline.source } : null };
+    }) };
+  }
   release(id: string) {
     const snapshot = this.snapshot();
     const release = snapshot.releases.find((r) => r.id === id);

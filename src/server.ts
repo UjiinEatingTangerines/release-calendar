@@ -26,6 +26,7 @@ export function createApp(runtime: Runtime) {
   app.onError((error, c) => c.json({ error: error instanceof AppError ? error.code : error instanceof z.ZodError ? 'INPUT_INVALID' : 'LOCAL_OPERATION_FAILED' }, error instanceof AppError && error.code.endsWith('NOT_FOUND') ? 404 : 400));
   app.get('/api/projects', (c) => c.json({ mode: runtime.demo ? 'demo' : 'live', projects: runtime.config.projects.map((p) => ({ id: p.id, name: p.name, timezone: p.timezone })) }));
   app.get('/api/status', async (c) => c.json((await runtime.queries(c.req.query('project') ?? '')).status()));
+  app.get('/api/menu', async (c) => c.json((await runtime.queries(c.req.query('project') ?? '')).menu()));
   app.get('/api/calendar', async (c) => c.json((await runtime.queries(c.req.query('project') ?? '')).calendar(c.req.query('month') ?? '')));
   app.get('/api/release', async (c) => c.json((await runtime.queries(c.req.query('project') ?? '')).release(c.req.query('id') ?? '')));
   app.get('/api/guide', async (c) => {

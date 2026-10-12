@@ -48,3 +48,15 @@ Lighthouse ran through a Playwright-owned Chrome instance using the Node API, th
 - Provider permissions, scoped-token setup, rate-limit policies and larger data sizes still need verification in the user's own environment.
 - No provider change-history reconstruction, generated recurring slots, sub-day calendar, deployment evidence, multi-user authentication, Data Center, Enterprise, or MCP server.
 - Browser artifacts are local evidence, not committed proof; rerun the scripts on a checkout to reproduce.
+
+## macOS companion and popover (0.2)
+
+- `pnpm check`, `pnpm test`: 46 tests including menu/guide phase consistency, civil-date countdowns, overdue/undated releases, empty/stale data, independent ephemeral servers, ownership-pipe shutdown, valid private credential loading, unsafe credential permission rejection, redaction and invalid-config failure.
+- `pnpm desktop:build`: Swift 6 native executable and local `.app` built successfully on Apple Silicon; packaged server and web have no checkout dependency, but require the build machine's installed Node.js.
+- `node scripts/native-qa.mjs`: actual AppKit application loads, opens/closes NSPopover, switches projects including an empty one, preserves cache on missing-credential refresh, constructs project/release web links, restarts and closes its owned servers on quit. Fixtures and cache are isolated temporary files; no live-provider calls.
+- `node scripts/desktop-web-qa.mjs`: owned Chrome opens the menu deep link, selects the nondefault project, month and release and displays two expected tickets. Browser and test server close in `finally`.
+- `pnpm test:browser`: existing eight web scenario groups still pass, with zero axe violations and page errors.
+- `scripts/render-menu.swift`: the same production SwiftUI content is rendered through NSHostingView (not a HTML imitation) into light/dark, reduced-height and empty/error PNGs. Header/footer stay fixed while the list scrolls. The parent directly inspected these artifacts. OS screen capture and outside accessibility automation were unavailable; native harness actions and app-owned view snapshots were used instead. User confirmed that the original menu bar icon appeared; this is not a claim of full VoiceOver or external mouse/keyboard automation coverage.
+- No real Jira/GitHub connection, Intel build, notarized distribution, auto-update or login-item verification was performed. The earlier Lighthouse results describe the web calendar, not the native popover.
+
+Artifacts remain in ignored `artifacts/`: `native-qa.json`, `desktop-web-qa.json`, `menu-web-link.png`, `menu-light.png`, `menu-dark.png`, `menu-small.png`, `menu-empty.png`. Rebuild the app before native QA. Reproduce native snapshots by compiling `desktop/Models.swift`, `desktop/Tokens.swift`, `desktop/PopoverView.swift`, `scripts/render-menu.swift` with Swift 6 and passing a directory containing a fictional `/api/menu` response as `menu-api.json`.

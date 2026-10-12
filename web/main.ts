@@ -92,9 +92,11 @@ async function refreshData() {
   finally { refreshing = false; render(); }
 }
 try {
-  projects = await api.projects(); const first = projects.projects[0]; if (!first) throw new Error('No projects'); project = first.id;
-  month = dateInZone(new Date(),first.timezone).slice(0,7);
   const query = new URLSearchParams(location.search); const requestedMonth = query.get('month');
+  projects = await api.projects(); const first = projects.projects.find((p) => p.id === query.get('project')) ?? projects.projects[0]; if (!first) throw new Error('No projects'); project = first.id;
+  month = dateInZone(new Date(),first.timezone).slice(0,7);
   if (requestedMonth && /^\d{4}-(0[1-9]|1[0-2])$/.test(requestedMonth)) month = requestedMonth;
   await load();
+  const requestedRelease = query.get('release');
+  if (requestedRelease) await selectRelease(requestedRelease);
 } catch (failure) { if (!(failure instanceof Error)) throw failure; loading = false; error = '앱을 불러오지 못했습니다. 서버와 설정을 확인한 후 페이지를 새로고침하세요.'; render(); }

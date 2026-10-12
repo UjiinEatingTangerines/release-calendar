@@ -1,5 +1,8 @@
 # Release Calendar
 
+macOS 메뉴 막대 앱도 제공합니다. `pnpm desktop:build` 후 `pnpm desktop`으로 실행하면 가까운 일정과 동기화 상태를 확인하고, 상세 웹 달력을 열 수 있습니다. 서버는 앱이 자동 관리합니다. [설치·로컬 연동 설정 안내](docs/macos.md)를 참고하세요.
+
+
 Jira Releases를 기준으로 릴리스 일정과 포함 티켓을 월간 달력에서 읽고, 같은 데이터를 CLI로 조회하는 단일 사용자용 로컬 앱입니다. 첫 지원 대상은 **Jira Cloud와 GitHub.com**입니다.
 
 ## 빠른 시작

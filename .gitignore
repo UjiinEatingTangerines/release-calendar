@@ -10,5 +10,7 @@ data/
 cache/
 snapshots/
 artifacts/
+desktop-build/
+credentials.json
 *.log
 .DS_Store

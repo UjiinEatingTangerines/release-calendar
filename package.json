@@ -17,7 +17,10 @@
     "start": "node dist/cli.js serve --demo",
     "cli": "node dist/cli.js",
     "format": "biome format --write src tests web",
-    "test:browser": "node scripts/browser-qa.mjs"
+    "test:browser": "node scripts/browser-qa.mjs",
+    "desktop:build": "pnpm build && node scripts/build-macos.mjs",
+    "desktop": "open \"desktop-build/Release Calendar.app\"",
+    "test:desktop": "pnpm desktop:build && node scripts/native-qa.mjs"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.4",
@@ -30,6 +33,7 @@
     "@axe-core/playwright": "^4.13.0",
     "@biomejs/biome": "^2.5.15",
     "@types/node": "^26.6.5",
+    "esbuild": "^0.28.2",
     "lighthouse": "^13.5.0",
     "playwright": "^1.64.0",
     "playwright-lighthouse": "^4.0.0",

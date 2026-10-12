@@ -43,3 +43,7 @@ The source provider text is inert data: Jira bodies/comments are not fetched; PR
 ## Extending connectors
 
 Add a new collector producing the existing validated Release/Ticket/Pull records with provider-scoped stable IDs, explicit coverage and link evidence. Keep GET endpoint allowlists and parsing at the connector boundary. Do not add source mutations to Runtime or Queries. Jira Data Center and GitHub Enterprise require separate host/auth/API contracts; the Cloud/com allowlists must not be relaxed implicitly.
+
+## Native macOS companion
+
+`desktop/` contains an AppKit status item, SwiftUI popover, typed HTTP decoding and a Process owner. `src/desktop.ts` launches the same Hono app on an OS-assigned loopback port and loads local desktop credentials only for configured env names. An inherited stdin pipe establishes ownership: EOF/termination shuts down that app's server. The native wrapper never owns CLI-launched servers. SwiftUI cards consume `/api/menu`, which derives phases/deadlines from `Queries.guide`; there is no separate schedule engine. Web links carry validated project/release/month parameters. `scripts/build-macos.mjs` bundles server/web into an ad-hoc signed `.app`, referring to the machine's existing Node.js installation.
