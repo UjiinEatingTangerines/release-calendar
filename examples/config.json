@@ -1,0 +1,34 @@
+{
+  "projects": [
+    {
+      "id": "demo",
+      "name": "Orbit · fictional project",
+      "timezone": "Asia/Seoul",
+      "jira": {
+        "site": "https://fictional-orbit.atlassian.net",
+        "projectKey": "DEMO",
+        "emailEnv": "RELEASE_JIRA_EMAIL",
+        "tokenEnv": "RELEASE_JIRA_TOKEN"
+      },
+      "github": {
+        "repositories": ["fictional-orbit/web", "fictional-orbit/api"],
+        "tokenEnv": "RELEASE_GITHUB_TOKEN"
+      },
+      "ticketDates": {
+        "start": { "field": "customfield_10015", "type": "date" },
+        "due": { "field": "duedate", "type": "date" }
+      },
+      "rules": {
+        "featureFreeze": { "days": -5, "basis": "weekdays" },
+        "qa": { "days": -3, "basis": "weekdays" }
+      },
+      "staleAfterHours": 24,
+      "guidance": {
+        "development": "포함 티켓과 개별 기한을 확인하고 작업하세요.",
+        "frozen": "새 기능은 다음 릴리스 대상으로 검토하고 수정 범위를 확인하세요.",
+        "qa": "신규 기능은 다음 릴리스 대상으로 검토하고 QA 확인과 결함 수정을 우선하세요.",
+        "release": "원본에서 릴리스 상태와 배포 증거를 확인하세요."
+      }
+    }
+  ]
+}

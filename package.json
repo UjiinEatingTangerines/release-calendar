@@ -1,0 +1,40 @@
+{
+  "name": "release-calendar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local, read-only Jira release calendar and CLI",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "bin": {
+    "release-calendar": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && vite build",
+    "check": "tsc --noEmit",
+    "test": "pnpm build && vitest run --config vitest.config.ts",
+    "start": "node dist/cli.js serve --demo",
+    "cli": "node dist/cli.js",
+    "format": "biome format --write src tests web",
+    "test:browser": "node scripts/browser-qa.mjs"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.4",
+    "commander": "^15.0.0",
+    "hono": "^4.13.13",
+    "ky": "^2.2.0",
+    "zod": "^4.6.6"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@biomejs/biome": "^2.5.15",
+    "@types/node": "^26.6.5",
+    "lighthouse": "^13.5.0",
+    "playwright": "^1.64.0",
+    "playwright-lighthouse": "^4.0.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.3"
+  }
+}

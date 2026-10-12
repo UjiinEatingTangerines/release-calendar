@@ -1,0 +1,14 @@
+node_modules/
+dist/
+web-dist/
+.env
+.env.*
+!.env.example
+config.local.json
+.release-calendar/
+data/
+cache/
+snapshots/
+artifacts/
+*.log
+.DS_Store
