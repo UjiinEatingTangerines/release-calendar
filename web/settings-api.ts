@@ -16,6 +16,11 @@ export async function settingsSync(project: string) {
 }
 export async function errorMessage(error: unknown): Promise<string> {
   const messages: Record<string, string> = {
+    OAUTH_REGISTRATION_FAILED: 'Atlassian 로그인 준비에 실패했습니다. 네트워크 연결을 확인하고 다시 눌러 주세요.',
+    MCP_CONNECTION_FAILED: 'Atlassian 연결을 확인하지 못했습니다. 다시 로그인하거나 잠시 후 재시도하세요.',
+    MCP_READ_TOOL_UNAVAILABLE: '현재 Atlassian 연결에 필요한 조회 기능이 없습니다. 조회 권한과 조직 정책을 확인하세요.',
+    MCP_TOOL_SCHEMA_UNSUPPORTED: 'Atlassian 조회 형식이 변경되었습니다. 기존 데이터는 유지됩니다.',
+    MCP_READ_FAILED: 'Atlassian에서 조회를 완료하지 못했습니다. 권한과 연결 상태를 확인하세요.',
     OAUTH_APP_REQUIRED: '최초 앱 등록 정보를 설정해 주세요.', OAUTH_IN_PROGRESS: '진행 중인 로그인을 완료하거나 취소해 주세요.',
     OAUTH_CALLBACK_PORT_BUSY: '다른 창에서 로그인 중이거나 4318 포트를 사용 중입니다. 진행 중인 로그인을 마친 뒤 다시 시도하세요.',
     OAUTH_REAUTHORIZE: '로그인이 만료되거나 해제됐습니다. 로그인 버튼으로 다시 연결하세요.', OAUTH_TOKEN_FAILED: '인증에 실패했습니다. 앱 등록 정보와 승인을 확인하고 다시 로그인하세요.',

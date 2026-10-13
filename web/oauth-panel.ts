@@ -11,7 +11,7 @@ export function oauthPanel(csrf: string, saved: () => void) {
   root.append(node('h2', '로그인으로 연결'), node('p', '브라우저에서 승인한 뒤 프로젝트와 저장소를 선택하세요. API 토큰을 복사하지 않아도 됩니다.', 'muted'), cards, choices, notice);
   const client = ky.create({ prefix: '/api/settings/oauth', retry: 0, timeout: 60000, headers: { 'X-Release-Settings': csrf } });
   let view: z.infer<typeof authViewSchema> | undefined;
-  let jiraGrant = '', githubGrant = '', timer: ReturnType<typeof setTimeout> | undefined, pending = '', disposed = false;
+  let jiraGrant = '', githubGrant = '', timer: ReturnType<typeof setTimeout> | undefined, pending = '', disposed = false, starting = false;
   let sites: z.infer<typeof siteSchema>[] = [], projects: z.infer<typeof choiceSchema>[] = [], repositories: z.infer<typeof repoSchema>[] = [];
   const selectedRepos = new Set<string>();
   let siteId = '', projectKey = '', name = '';
@@ -56,10 +56,14 @@ export function oauthPanel(csrf: string, saved: () => void) {
     } catch (error) { if (!(error instanceof Error)) throw error; pending = ''; renderCards(); message(await errorMessage(error), true); }
   }
   async function start(provider: Provider, grantId?: string) {
+    if (starting || pending) return;
+    starting = true; renderCards(); message('브라우저 로그인을 준비하고 있습니다…');
+    try {
     const result = z.object({ id: z.string(), url: z.url() }).parse(await client.post('start', { json: { provider, ...(grantId ? { grantId } : {}) } }).json());
     pending = result.id; renderCards(); message('브라우저에서 로그인과 조회 권한 승인을 완료해 주세요.');
     const forward = link('브라우저에서 로그인 계속하기 ↗', result.url); notice.append(node('br'), forward);
     forward.click(); void poll(result.id);
+    } finally { starting = false; renderCards(); }
   }
   function setup(provider: Provider, card: HTMLElement) {
     const details = node('details', '', 'oauth-setup'); details.open = false; details.append(node('summary', '최초 1회 · 앱 소유자 등록 설정'));
@@ -86,12 +90,12 @@ export function oauthPanel(csrf: string, saved: () => void) {
       const label = provider === 'jira' ? 'Jira' : 'GitHub', card = node('div', '', 'settings-card oauth-card');
       card.append(node('h3', label), tag(view?.apps[provider] ? '로그인 준비됨' : '앱 등록 필요', view?.apps[provider] ? 'development' : 'freeze'));
       const ready = !!view?.apps[provider];
-      const signIn = button(pending ? '브라우저 승인 대기 중' : ready ? `${label} 로그인` : `${label} 로그인 준비하기`, () => {
+      const signIn = button(starting ? '로그인 준비 중…' : pending ? '브라우저 승인 대기 중' : ready ? `${label} 로그인` : `${label} 로그인 준비하기`, () => {
         if (ready) { void run(() => start(provider)); return; }
         const details = card.querySelector('details');
         if (details) { details.open = true; details.querySelector('summary')?.focus(); details.scrollIntoView({ block: 'nearest' }); }
       }, 'primary');
-      signIn.disabled = !view || !!pending; card.append(signIn);
+      signIn.disabled = !view || !!pending || starting; card.append(signIn);
       if (view && !view.apps[provider]) {
         const hint = node('p', '로그인 준비가 필요합니다. 아래 ‘최초 1회 · 앱 소유자 등록 설정’을 완료하면 로그인할 수 있습니다.', 'small');
         hint.id = `oauth-${provider}-setup-hint`; signIn.setAttribute('aria-describedby', hint.id); card.append(hint);
@@ -102,14 +106,16 @@ export function oauthPanel(csrf: string, saved: () => void) {
           if (provider === 'jira') { jiraGrant = grant.id; await loadSites(); } else { githubGrant = grant.id; await loadRepos(); }
         }));
         use.disabled = grant.reconnect; card.append(use);
-        const reconnect = button(`${label} 다시 인증`, () => void run(() => start(provider, grant.id))); reconnect.disabled = !!pending; card.append(reconnect);
+        const reconnect = button(`${label} 다시 인증`, () => void run(() => start(provider, grant.id))); reconnect.disabled = !!pending || starting; card.append(reconnect);
         if (grant.reconnect) card.append(tag('다시 로그인 필요', 'freeze'));
         card.append(button('로컬 로그아웃', () => {
           if (!confirm('이 로그인을 사용하는 모든 연결에서 재인증이 필요합니다. 로컬 로그인 정보를 삭제할까요? 서비스의 앱 승인은 별도로 철회해야 합니다.')) return;
           void run(async () => { await client.post('forget', { json: { id: grant.id } }); if (jiraGrant === grant.id) { jiraGrant = ''; sites = []; projects = []; } if (githubGrant === grant.id) { githubGrant = ''; repositories = []; selectedRepos.clear(); } renderChoices(); await refresh(); });
         }, 'danger-action'));
       }
-      setup(provider, card); cards.append(card);
+      if (provider === 'github') setup(provider, card);
+      else card.append(node('p', '브라우저에서 Atlassian에 로그인하고 승인하세요. 인증은 이 기기에 저장되며 다음 실행에서도 사용됩니다.', 'small'));
+      cards.append(card);
     }
     if (pending) cards.append(button('로그인 취소', () => void run(async () => { const id = pending; pending = ''; if (timer) clearTimeout(timer); await client.post('cancel', { json: { id } }); await refresh(); message('로그인을 취소했습니다.'); })));
   }

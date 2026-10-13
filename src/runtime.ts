@@ -1,3 +1,4 @@
+import type { z } from 'zod';
 import { defaultDataDir, type Project } from './config.js';
 import { AppError } from './core/model.js';
 import { Queries } from './core/query.js';
@@ -25,12 +26,23 @@ export class Runtime {
     if (!project) throw new AppError('PROJECT_NOT_FOUND');
     return project;
   }
+  readers(project: Project, resolveSecret = this.connections.resolveSecret) {
+    const clients = connectors(project, resolveSecret, (id, provider) => this.oauth.access(id, provider));
+    const { oauthGrant, cloudId, projectKey } = project.jira;
+    if (!oauthGrant || !cloudId) return clients;
+    const fallback = clients.jira();
+    return { ...clients, jira: () => ({ get: async <T>(path: string, schema: z.ZodType<T>) => {
+      const reader = await this.oauth.isMcp(oauthGrant) ? this.oauth.jiraReader(oauthGrant, cloudId, projectKey) : fallback;
+      return reader.get(path, schema);
+    } }) };
+  }
   async queries(id: string, refresh = false) {
     await this.connections.reload();
     const project = this.project(id);
     const now = this.options.demoAt ? new Date(`${this.options.demoAt}T03:00:00Z`) : new Date();
     const store = new Store(this.options.dataDir ?? defaultDataDir(), project);
-    const state = this.demo ? demoState(now) : refresh ? await syncProject(project, store, { clients: connectors(project, this.connections.resolveSecret, (id, provider) => this.oauth.access(id, provider)), now }) : await store.read();
+    const clients = this.readers(project);
+    const state = this.demo ? demoState(now) : refresh ? await syncProject(project, store, { clients, now }) : await store.read();
     return new Queries(project, state, now);
   }
 }

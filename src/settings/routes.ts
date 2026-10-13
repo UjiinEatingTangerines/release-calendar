@@ -1,5 +1,4 @@
 import { oauthRoutes } from '../auth/routes.js';
-import { connectors } from '../sync.js';
 import { probeReaders } from './probe.js';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -8,7 +7,7 @@ import { connectionInputSchema, removalSchema } from '../core/connection-model.j
 import type { Runtime } from '../runtime.js';
 import { type Probe } from './probe.js';
 
-export function settingsRoutes(runtime: Runtime, probe: Probe = (project, secret) => probeReaders(project, connectors(project, secret, (id, provider) => runtime.oauth.access(id, provider)))) {
+export function settingsRoutes(runtime: Runtime, probe: Probe = (project, secret) => probeReaders(project, runtime.readers(project, secret))) {
   const routes = new Hono(), csrf = randomUUID();
   routes.use('*', bodyLimit({ maxSize: 64 * 1024, onError: (c) => c.json({ error: 'SETTINGS_BODY_TOO_LARGE' }, 413) }));
   routes.use('*', async (c, next) => {

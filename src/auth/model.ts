@@ -2,7 +2,7 @@ import { z } from 'zod';
 export const providerSchema = z.enum(['jira', 'github']);
 export type Provider = z.infer<typeof providerSchema>;
 export const appInputSchema = z.object({ provider: providerSchema, clientId: z.string().trim().min(1).max(200), clientSecret: z.string().trim().min(1).max(8192) });
-export const clientSchema = appInputSchema.omit({ provider: true });
+export const clientSchema = appInputSchema.omit({ provider: true }).extend({ clientSecret: z.string().max(8192), kind: z.enum(['rest', 'mcp']).optional() });
 export const grantSchema = z.object({ id: z.uuid(), provider: providerSchema, accessToken: z.string().min(1).nullable(), refreshToken: z.string().optional(), expiresAt: z.number().optional(), createdAt: z.string() });
 export type Grant = z.infer<typeof grantSchema>;
 export type Client = z.infer<typeof clientSchema>;

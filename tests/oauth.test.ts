@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtemp, rm, stat, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, stat, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:http';
@@ -154,6 +154,22 @@ describe('Browser OAuth', () => {
       // Then authentication failure remains separate from the retained source snapshot.
       expect(query.status().warnings).toContain('jira:OAUTH_REAUTHORIZE');
       expect(query.status().dataAsOf).toBe(expected.current?.observedAt);
+    } finally { await f.cleanup(); }
+  });
+  it('preserves cached schedules when the local OAuth document becomes invalid', async () => {
+    const f = await fixture();
+    try {
+      const runtime = await Runtime.create({ demo: true, settingsPath: join(f.dir, 'connections.json'), dataDir: join(f.dir, 'data') });
+      await runtime.connections.save({ revision: 'initial', credentials: {}, project: editableProjectSchema.parse({ ...demoProject, jira: { ...demoProject.jira, cloudId: cloud, oauthGrant: randomUUID() }, github: { ...demoProject.github, repositories: [] } }) });
+      const expected = demoState(new Date('2027-03-10T00:00:00Z'));
+      const store = new Store(join(f.dir, 'data'), runtime.project('demo'));
+      await store.update(async () => ({ ...expected, configHash: store.hash }));
+      await writeFile(runtime.oauth.store.path, '{}', { mode: 0o600 });
+      const cached = await runtime.queries('demo');
+      expect(cached.status().dataAsOf).toBe(expected.current?.observedAt);
+      const refreshed = await runtime.queries('demo', true);
+      expect(refreshed.status().warnings).toContain('jira:OAUTH_FILE_INVALID');
+      expect(refreshed.status().dataAsOf).toBe(expected.current?.observedAt);
     } finally { await f.cleanup(); }
   });
   it('does not let a cancelled in-flight exchange store a grant', async () => {

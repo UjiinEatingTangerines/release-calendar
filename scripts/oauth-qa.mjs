@@ -15,8 +15,23 @@ const cloud = '11111111-1111-4111-8111-111111111111', calls = [], errors = [];
 try {
   const reservation = createServer(); await new Promise(resolve => reservation.listen(0, '127.0.0.1', resolve));
   const port = reservation.address().port; await new Promise(resolve => reservation.close(resolve));
-  const transport = new OAuthTransport(async input => {
-    const request = new Request(input), url = new URL(request.url); calls.push({ method: request.method, path: url.pathname });
+  const transport = new OAuthTransport(async (input, init) => {
+    const request = new Request(input, init), url = new URL(request.url); calls.push({ method: request.method, path: url.pathname });
+    if (url.hostname === 'mcp.atlassian.com') {
+      if (url.pathname === '/v1/register') return Response.json({ client_id: 'fictional-dynamic-client' });
+      if (url.pathname === '/v1/token') return Response.json({ access_token: 'fictional-access', refresh_token: 'fictional-refresh', token_type: 'Bearer', expires_in: 3600 });
+      if (request.method !== 'POST') return new Response(null, { status: 405 });
+      const rpc = await request.json();
+      if (!('id' in rpc)) return new Response(null, { status: 202 });
+      let result;
+      if (rpc.method === 'initialize') result = { protocolVersion: '2025-03-26', capabilities: { tools: {} }, serverInfo: { name: 'fictional', version: '1' } };
+      else if (rpc.method === 'tools/list') result = { tools: ['getAccessibleAtlassianResources', 'listJiraProjects'].map(name => ({ name, inputSchema: { type: 'object', properties: { cloudId: { type: 'string' }, startAt: { type: 'number' }, maxResults: { type: 'number' } } } })) };
+      else if (rpc.method === 'tools/call') {
+        const data = rpc.params.name === 'getAccessibleAtlassianResources' ? [{ id: cloud, name: 'Fictional Orbit', url: 'https://fictional-orbit.atlassian.net' }] : { values: [{ id: '100', key: 'ORBIT', name: 'Orbit Release' }], total: 1, isLast: true };
+        result = { content: [{ type: 'text', text: JSON.stringify(data) }] };
+      } else throw new Error('Unexpected MCP method');
+      return Response.json({ jsonrpc: '2.0', id: rpc.id, result });
+    }
     if (request.method === 'POST') return Response.json({ access_token: 'fictional-access', refresh_token: 'fictional-refresh', expires_in: 3600, ...(url.hostname === 'github.com' ? { token_type: 'bearer' } : {}) });
     if (url.pathname.includes('accessible-resources')) return Response.json([{ id: cloud, name: 'Fictional Orbit', url: 'https://fictional-orbit.atlassian.net' }]);
     if (url.pathname.includes('/project/search')) return Response.json({ values: [{ id: '100', key: 'ORBIT', name: 'Orbit Release' }], total: 1, isLast: true });
@@ -31,6 +46,7 @@ try {
   browser = await chromium.connect(browserServer.wsEndpoint());
   const context = await browser.newContext({ viewport: { width: 1120, height: 900 } });
   // Replace only provider transport/login pages. Callbacks, CSRF, files and selection routes are real.
+  await context.route('https://mcp.atlassian.com/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Fictional consent</h1>' }));
   await context.route('https://auth.atlassian.com/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Fictional consent</h1>' }));
   await context.route('https://github.com/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Fictional consent</h1>' }));
   await context.route('**/api/refresh?**', route => route.fulfill({ json: { warnings: [] } }));
@@ -39,6 +55,7 @@ try {
   await page.goto(`${address}/settings.html`);
   for (const [provider, label] of [['jira', 'Jira'], ['github', 'GitHub']]) {
     const card = page.locator('.oauth-card').filter({ has: page.getByRole('heading', { name: label, exact: true }) });
+    if (provider === 'github') {
     const login = card.getByRole('button', { name: `${label} 로그인 준비하기`, exact: true });
     await login.waitFor();
     await card.getByText('로그인 준비가 필요합니다.', { exact: false }).waitFor();
@@ -52,11 +69,14 @@ try {
     await page.locator(`#oauth-${provider}-client`).fill('fictional-client');
     await page.locator(`#oauth-${provider}-secret`).fill('fictional-secret');
     await card.getByRole('button', { name: '앱 등록 정보 저장', exact: true }).click();
+    } else {
+      assert.equal(await card.locator('input').count(), 0);
+    }
     await card.getByRole('button', { name: `${label} 로그인`, exact: true }).waitFor();
     const popupEvent = context.waitForEvent('page');
     await card.getByRole('button', { name: `${label} 로그인`, exact: true }).click();
     const popup = await popupEvent;
-    await popup.waitForURL(provider === 'jira' ? 'https://auth.atlassian.com/**' : 'https://github.com/**');
+    await popup.waitForURL(provider === 'jira' ? 'https://mcp.atlassian.com/**' : 'https://github.com/**');
     const state = new URL(popup.url()).searchParams.get('state'); assert.ok(state);
     await popup.goto(`${runtime.oauth.callback(provider)}?state=${state}&code=fictional-code`);
     await popup.getByRole('heading', { name: '로그인을 완료했습니다.' }).waitFor(); await popup.close();
@@ -98,9 +118,9 @@ try {
   const grants = (await (await fetch(`${address}/api/settings/oauth`)).json()).grants.filter(g => g.provider === 'github');
   assert.equal(grants.length, 1); assert.equal(grants[0].id, document.projects[0].github.oauthGrant);
 
-  assert.ok(calls.filter(c => c.method === 'POST').every(c => ['/oauth/token', '/login/oauth/access_token'].includes(c.path)));
+  assert.ok(calls.filter(c => c.method === 'POST').every(c => ['/v1/register', '/v1/token', '/v2/mcp', '/oauth/token', '/login/oauth/access_token'].includes(c.path)));
   assert.deepEqual(errors, []);
-  const report = { verdict: 'PASS', scenarios: ['one-time app setup', 'Jira and GitHub browser authorization and real loopback callbacks', 'site/project/repository selection', 'OAuth-backed project persisted without manual API tokens; reauthorization preserves its grant ID', 'desktop/mobile zero axe violations, no overflow', 'no secret in status responses; only auth token endpoints use POST'], liveAuthentication: 'not tested; provider responses and consent pages are fictional fixtures' };
+  const report = { verdict: 'PASS', scenarios: ['Jira browser login without client credentials; GitHub owner setup preserved', 'Jira and GitHub browser authorization and real loopback callbacks', 'site/project/repository selection', 'OAuth-backed project persisted without manual API tokens; reauthorization preserves its grant ID', 'desktop/mobile zero axe violations, no overflow', 'no secret in status responses; MCP read allowlist and authentication endpoints use POST'], liveAuthentication: 'not tested; provider responses and consent pages are fictional fixtures' };
   await writeFile('artifacts/oauth-qa.json', JSON.stringify(report, null, 2)); console.log(JSON.stringify(report, null, 2));
 } catch (error) {
   console.error({ notices: page ? await page.getByRole('status').allTextContents() : [], errors, calls });
