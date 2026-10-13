@@ -77,7 +77,7 @@ export function oauthPanel(csrf: string, saved: () => void) {
     if (starting || pending || view?.grants.some(g => g.provider === provider && !g.reconnect)) return;
     starting = true; renderCards(); message('브라우저 로그인을 준비하고 있습니다…');
     try {
-    const result = z.object({ id: z.string(), url: z.url(), userCode: z.string().optional() }).parse(await client.post('start', { json: { provider, ...(grantId ? { grantId } : {}) } }).json());
+    const result = z.object({ id: z.string(), url: z.url().optional(), userCode: z.string().optional() }).parse(await client.post('start', { json: { provider, ...(grantId ? { grantId } : {}) } }).json());
     pending = result.id; renderCards(); message('브라우저에서 로그인과 앱 승인을 완료해 주세요.');
     if (result.userCode) {
       notice.append(node('p', 'GitHub 화면에 아래 일회용 코드를 입력하고 승인하세요.'), node('strong', result.userCode));
@@ -88,6 +88,7 @@ export function oauthPanel(csrf: string, saved: () => void) {
       });
       notice.append(copy);
     }
+    if (!result.url) { void poll(result.id); return; }
     const forward = link('브라우저에서 로그인 계속하기 ↗', result.url); notice.append(node('br'), forward);
     forward.click(); notice.scrollIntoView({ block: 'nearest' }); void poll(result.id);
     } catch (error) {
@@ -106,27 +107,27 @@ export function oauthPanel(csrf: string, saved: () => void) {
       const ready = !!view?.apps[provider];
       const signIn = button(authenticated ? `${label} 로그인됨` : starting ? '로그인 준비 중…' : pending ? '브라우저 승인 대기 중' : ready ? `${label} 로그인` : `${label} 로그인 준비하기`, () => {
         if (ready) { void run(() => start(provider)); return; }
-        message('GitHub CLI(gh)를 설치한 뒤 앱을 다시 시작하세요. 아래 설치 안내를 확인하세요.', true);
+        message(provider === 'jira' ? 'Codex CLI를 설치한 뒤 앱을 다시 시작하세요.' : 'GitHub CLI(gh)를 설치한 뒤 앱을 다시 시작하세요. 아래 설치 안내를 확인하세요.', true);
       }, 'primary');
       signIn.disabled = authenticated || !view || !!pending || starting; card.append(signIn);
-      if (view && !view.apps[provider]) {
+      if (view && !view.apps[provider] && provider === 'github') {
         const hint = node('p', 'GitHub CLI(gh)가 필요합니다. 설치 후 앱을 다시 시작하면 브라우저로 로그인할 수 있습니다.', 'small');
         card.append(link('GitHub CLI 설치 안내 ↗', 'https://cli.github.com/'));
         hint.id = `oauth-${provider}-setup-hint`; signIn.setAttribute('aria-describedby', hint.id); card.append(hint);
       }
       for (const grant of grants) {
-        const time = node('time', `인증 시각: ${new Date(grant.createdAt).toLocaleString()}`, 'small'); time.dateTime = grant.createdAt; card.append(time);
+        const time = node('time', `${provider === 'jira' && view?.jiraAuthMode === 'codex' ? '연결 확인 시각' : '인증 시각'}: ${new Date(grant.createdAt).toLocaleString()}`, 'small'); time.dateTime = grant.createdAt; card.append(time);
         const use = button(`${label} 연결 대상 선택`, () => void run(async () => {
           if (provider === 'jira') { jiraGrant = grant.id; await loadSites(); } else { githubGrant = grant.id; await loadRepos(); }
         }));
         card.append(use);
         card.append(button('로컬 로그아웃', () => {
-          if (!confirm('이 로그인을 사용하는 모든 연결에서 재인증이 필요합니다. 로컬 로그인 정보를 삭제할까요? 서비스의 앱 승인은 별도로 철회해야 합니다.')) return;
+          if (!confirm(provider === 'jira' && view?.jiraAuthMode === 'codex' ? '이 앱의 Jira 연결만 해제합니다. Codex 로그인은 유지됩니다. 계속할까요?' : '이 로그인을 사용하는 모든 연결에서 재인증이 필요합니다. 로컬 로그인 정보를 삭제할까요? 서비스의 앱 승인은 별도로 철회해야 합니다.')) return;
           void run(async () => { await client.post('forget', { json: { id: grant.id } }); if (jiraGrant === grant.id) { jiraGrant = ''; sites = []; projects = []; } if (githubGrant === grant.id) { githubGrant = ''; repositories = []; selectedRepos.clear(); } renderChoices(); await refresh(); message(`${label} 로컬 로그아웃을 완료했습니다. 다시 인증하면 기존 연결을 계속 사용할 수 있습니다.`); });
         }, 'danger-action'));
       }
       if (provider === 'github') card.append(node('p', 'GitHub CLI의 브라우저 인증을 사용합니다. 승인 권한에는 쓰기가 포함될 수 있지만 이 앱은 조회만 수행합니다. 기존 터미널 계정 설정은 변경하지 않습니다.', 'small'));
-      else card.append(node('p', '브라우저에서 Atlassian에 로그인하고 승인하세요. 인증은 이 기기에 저장되며 다음 실행에서도 사용됩니다.', 'small'));
+      else card.append(node('p', view?.jiraAuthMode === 'codex' ? 'Codex의 Atlassian 인증을 먼저 확인합니다. 인증이 없으면 브라우저 승인을 열어 Codex와 함께 사용합니다. 로컬 로그아웃은 앱 연결만 해제합니다. 표시 시각은 앱 연결 확인 시각입니다.' : '브라우저에서 Atlassian에 로그인하고 승인하세요. 인증은 이 기기에 저장되며 다음 실행에서도 사용됩니다.', 'small'));
       cards.append(card);
     }
     if (pending) cards.append(button('로그인 취소', () => void run(async () => { const id = pending; await client.post('cancel', { json: { id } }); pending = ''; if (timer) clearTimeout(timer); await refresh(); message('로그인을 취소했습니다.'); })));

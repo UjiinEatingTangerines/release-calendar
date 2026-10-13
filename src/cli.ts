@@ -23,11 +23,13 @@ for (const name of ['status', 'calendar', 'release', 'guide', 'sync', 'serve']) 
     const options = optionsSchema.parse(command.opts());
     const runtime = await Runtime.create(options);
     if (name === 'serve') { startServer(runtime, options.port); return; }
+    try {
     const query = await runtime.queries(options.project, name === 'sync');
     const result = name === 'calendar' ? query.calendar(options.month ?? '') : name === 'release' ? query.release(z.string().parse(args[0]))
       : name === 'guide' ? query.guide(options.at ?? query.status().today, options.release) : query.status();
     process.stdout.write(`${JSON.stringify(result, null, options.json ? undefined : 2)}\n`);
     if (name === 'sync' && query.status().warnings.length) process.exitCode = 2;
+    } finally { await runtime.shutdown(); }
   });
 }
 try { await program.parseAsync(); }

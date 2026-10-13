@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { AppError } from '../core/model.js';
 import { mcpOrigin, mcpProjects, mcpJiraReader, unwrap } from './mcp.js';
 import { GhBrowser, type GithubBrowser } from './github-browser.js';
+import type { CodexConnection } from './codex.js';
 import { AuthStore } from './store.js';
 import { OAuthTransport, expired } from './transport.js';
 import { siteSchema, choiceSchema, repoSchema, type Provider, type AttemptView, type Client } from './model.js';
@@ -11,20 +12,21 @@ import { siteSchema, choiceSchema, repoSchema, type Provider, type AttemptView, 
 export class OAuth {
   readonly store: AuthStore;
   private listener: Server | undefined;
+  private codexFailed = false;
   private activeProvider: Provider | undefined;
   private githubTask: Promise<void> | undefined;
   private githubAbort: AbortController | undefined;
   private timeout: ReturnType<typeof setTimeout> | undefined;
   private readonly attempts = new Map<string, AttemptView>();
-  constructor(path: string, readonly transport = new OAuthTransport(), readonly port = 4318, readonly githubBrowser: GithubBrowser = new GhBrowser()) { this.store = new AuthStore(path); }
+  constructor(path: string, readonly transport = new OAuthTransport(), readonly port = 4318, readonly githubBrowser: GithubBrowser = new GhBrowser(), readonly codex?: CodexConnection) { this.store = new AuthStore(path); }
   callback(provider: Provider) { return `http://127.0.0.1:${this.port}/callback/${provider}`; }
   async view() {
     const doc = await this.store.read();
     const pending = [...this.attempts.values()].find(a => a.status === 'pending');
-    return { ...(pending && this.activeProvider ? { pendingAttempt: { id: pending.id, provider: this.activeProvider } } : {}), apps: { jira: true, github: !!doc.clients.github || this.githubBrowser.available() }, callback: `http://127.0.0.1:${this.port}/callback/`, grants: doc.grants.map(g => ({ id: g.id, provider: g.provider, createdAt: g.createdAt, reconnect: (g.provider === 'jira' && doc.clients.jira?.kind === 'mcp') || !g.accessToken || (expired(g) && !g.refreshToken) })) };
+    return { ...(pending && this.activeProvider ? { pendingAttempt: { id: pending.id, provider: this.activeProvider } } : {}), jiraAuthMode: this.codex ? 'codex' as const : 'direct' as const, apps: { jira: this.codex ? this.codex.available() : true, github: !!doc.clients.github || this.githubBrowser.available() }, callback: `http://127.0.0.1:${this.port}/callback/`, grants: doc.grants.map(g => ({ id: g.id, provider: g.provider, createdAt: g.createdAt, reconnect: g.kind === 'codex' ? !g.connected || this.codexFailed || !this.codex?.available() : (g.provider === 'jira' && doc.clients.jira?.kind === 'mcp') || !g.accessToken || (expired(g) && !g.refreshToken) })) };
   }
   async configure(provider: Provider, client: Client) {
-    if (this.listener || this.githubAbort) throw new AppError('OAUTH_IN_PROGRESS');
+    if (this.listener || this.githubAbort || this.activeProvider) throw new AppError('OAUTH_IN_PROGRESS');
     await this.store.update(async doc => ({ ...doc, clients: { ...doc.clients, [provider]: client }, grants: doc.grants.map(g => g.provider === provider ? { id: g.id, provider: g.provider, createdAt: g.createdAt, accessToken: null } : g) }));
   }
   async forget(id: string) {
@@ -52,16 +54,17 @@ export class OAuth {
     if (!token) throw new AppError('OAUTH_REAUTHORIZE'); return token;
   }
   close() {
+    if (this.activeProvider === 'jira') this.codex?.close();
     this.activeProvider = undefined;
     this.githubAbort?.abort(); this.githubAbort = undefined;
     if (this.timeout) clearTimeout(this.timeout);
     this.listener?.close(); this.listener?.closeIdleConnections(); this.listener = undefined;
   }
-  async shutdown() { this.close(); await this.githubTask; }
+  async shutdown() { this.close(); this.codex?.close(); await this.githubTask; }
   cancel(id: string) { const attempt = this.attempts.get(id); if (attempt?.status === 'pending') { this.attempts.set(id, { id, status: 'error', code: 'OAUTH_CANCELLED' }); this.close(); } }
   status(id: string) { const result = this.attempts.get(id); if (!result) throw new AppError('OAUTH_ATTEMPT_NOT_FOUND'); return result; }
   private async startGithub(replaceId?: string) {
-    if (this.listener || this.githubAbort) throw new AppError('OAUTH_IN_PROGRESS');
+    if (this.listener || this.githubAbort || this.activeProvider) throw new AppError('OAUTH_IN_PROGRESS');
     if (!this.githubBrowser.available()) throw new AppError('GITHUB_CLI_MISSING');
     const controller = new AbortController(); this.githubAbort = controller;
     this.activeProvider = 'github';
@@ -85,7 +88,7 @@ export class OAuth {
       } catch (error) {
         if (this.attempts.get(id)?.status === 'pending') this.attempts.set(id, { id, status: 'error', code: error instanceof AppError ? error.code : 'GITHUB_LOGIN_FAILED' });
       } finally {
-        clearTimeout(startup); ready(); if (this.githubAbort === controller) { this.githubAbort = undefined; if (this.timeout) clearTimeout(this.timeout); }
+        clearTimeout(startup); ready(); if (this.githubAbort === controller) { this.githubAbort = undefined; this.activeProvider = undefined; if (this.timeout) clearTimeout(this.timeout); }
       }
     })();
     // Return promptly on startup failure, or once the user-facing verification code exists.
@@ -95,7 +98,8 @@ export class OAuth {
     return { id, url: 'https://github.com/login/device', ...(attempt.userCode ? { userCode: attempt.userCode } : {}) };
   }
   async start(provider: Provider, replaceId?: string) {
-    if (this.listener || this.githubAbort) throw new AppError('OAUTH_IN_PROGRESS');
+    if (this.listener || this.githubAbort || this.activeProvider) throw new AppError('OAUTH_IN_PROGRESS');
+    if (provider === 'jira' && this.codex) return this.startCodex(replaceId);
     let current = await this.store.read();
     if (provider === 'jira' && (!current.clients.jira || current.clients.jira.kind === 'mcp')) {
       const registered = await this.transport.registerJira(this.callback(provider));
@@ -107,7 +111,7 @@ export class OAuth {
     if (replaceId && !current.grants.some(g => g.id === replaceId && g.provider === provider)) throw new AppError('OAUTH_REAUTHORIZE');
     if (provider === 'github' && !client) return this.startGithub(replaceId);
     if (!client) throw new AppError('OAUTH_APP_REQUIRED');
-    if (this.listener || this.githubAbort) throw new AppError('OAUTH_IN_PROGRESS');
+    if (this.listener || this.githubAbort || this.activeProvider) throw new AppError('OAUTH_IN_PROGRESS');
     let consumed = false;
     const id = randomUUID(), state = randomBytes(32).toString('hex'), verifier = randomBytes(32).toString('base64url');
     const listener = createServer((req, res) => {
@@ -124,7 +128,7 @@ export class OAuth {
           const tokens = await this.transport.token(provider, client, { grant_type: 'authorization_code', code, redirect_uri: this.callback(provider), ...(provider === 'github' || (client.kind === 'mcp' || client.kind === 'mcp-v2') ? { code_verifier: verifier } : {}) });
           const grantId = replaceId ?? randomUUID();
           await this.store.update(async doc => {
-            if (this.status(id).status !== 'pending') throw new AppError('OAUTH_CANCELLED');
+            if (this.attempts.get(id)?.status !== 'pending') throw new AppError('OAUTH_CANCELLED');
             if (doc.clients[provider]?.clientId !== client.clientId || doc.clients[provider]?.clientSecret !== client.clientSecret) throw new AppError('OAUTH_APP_CHANGED');
             return { ...doc, grants: [...doc.grants.filter(g => g.id !== grantId), { id: grantId, provider, ...tokens, createdAt: new Date().toISOString() }] };
           });
@@ -149,19 +153,55 @@ export class OAuth {
       ...(provider === 'jira' && (client.kind === 'mcp' || client.kind === 'mcp-v2') ? { scope: 'read:jira:agent-interface search:jira:agent-interface offline_access', resource: `${mcpOrigin}/v2/mcp`, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256' } : provider === 'jira' ? { audience: 'api.atlassian.com', scope: 'read:jira-work offline_access', prompt: 'consent' } : { scope: 'offline_access', code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256' }) }).toString();
     return { id, url: url.toString() };
   }
+  private async startCodex(replaceId?: string) {
+    const codex = this.codex; if (!codex?.available()) throw new AppError('CODEX_CLI_MISSING');
+    const doc = await this.store.read(), grants = doc.grants.filter(g => g.provider === 'jira');
+    if (replaceId && !grants.some(g => g.id === replaceId)) throw new AppError('OAUTH_REAUTHORIZE');
+    if (!replaceId && grants.length > 1) throw new AppError('OAUTH_SELECTION_INVALID');
+    const grantId = replaceId ?? grants[0]?.id ?? randomUUID(), id = randomUUID();
+    this.activeProvider = 'jira'; this.attempts.clear(); this.attempts.set(id, { id, status: 'pending' });
+    const complete = async (success: boolean) => {
+      if (this.attempts.get(id)?.status !== 'pending') return;
+      try {
+        if (!success) throw new AppError('OAUTH_REAUTHORIZE');
+        await codex.read('getAccessibleAtlassianResources', {});
+        await this.store.update(async current => {
+          if (this.attempts.get(id)?.status !== 'pending') throw new AppError('OAUTH_CANCELLED');
+          return { ...current, grants: [...current.grants.filter(g => g.id !== grantId), { id: grantId, provider: 'jira', kind: 'codex', connected: true, accessToken: null, createdAt: new Date().toISOString() }] };
+        });
+        this.codexFailed = false; this.attempts.set(id, { id, status: 'complete', grantId });
+      } catch { if (this.attempts.get(id)?.status === 'pending') this.attempts.set(id, { id, status: 'error', code: 'OAUTH_REAUTHORIZE' }); }
+      finally { if (this.attempts.has(id)) { this.activeProvider = undefined; if (this.timeout) clearTimeout(this.timeout); } }
+    };
+    this.timeout = setTimeout(() => this.cancel(id), 10 * 60 * 1000); this.timeout.unref();
+    try {
+      try { await codex.read('getAccessibleAtlassianResources', {}); }
+      catch { if (this.attempts.get(id)?.status !== 'pending') throw new AppError('OAUTH_CANCELLED'); const url = await codex.login(success => { void complete(success); }); return { id, url }; }
+      await complete(true); return { id };
+    } catch (error) { this.cancel(id); throw error; }
+  }
+  private async jiraCall(grant: string, name: string, args: Record<string, unknown>, signal?: AbortSignal) {
+    const stored = (await this.store.read()).grants.find(g => g.id === grant && g.provider === 'jira');
+    if (stored?.kind === 'codex') {
+      if (!stored.connected || !this.codex) throw new AppError('OAUTH_REAUTHORIZE');
+      try { const value = await this.codex.read(name, args); this.codexFailed = false; return value; }
+      catch (error) { this.codexFailed = true; throw error; }
+    }
+    return this.transport.mcp(await this.access(grant, 'jira'), name, args, signal);
+  }
   async isMcp(grant: string) {
     const doc = await this.store.read();
-    return (doc.clients.jira?.kind === 'mcp' || doc.clients.jira?.kind === 'mcp-v2') && doc.grants.some(g => g.id === grant && g.provider === 'jira');
+    return doc.grants.some(g => g.id === grant && g.provider === 'jira' && g.kind === 'codex') || (doc.clients.jira?.kind === 'mcp' || doc.clients.jira?.kind === 'mcp-v2') && doc.grants.some(g => g.id === grant && g.provider === 'jira');
   }
   jiraReader(grant: string, cloudId: string, projectKey: string, signal?: AbortSignal) {
-    return mcpJiraReader(cloudId, projectKey, async (name, args) => { signal?.throwIfAborted(); return this.transport.mcp(await this.access(grant, 'jira'), name, args, signal); });
+    return mcpJiraReader(cloudId, projectKey, async (name, args) => { signal?.throwIfAborted(); return this.jiraCall(grant, name, args, signal); });
   }
   async sites(grant: string) {
-    if (await this.isMcp(grant)) return z.array(siteSchema).parse(unwrap(await this.transport.mcp(await this.access(grant, 'jira'), 'getAccessibleAtlassianResources', {})));
+    if (await this.isMcp(grant)) return z.array(siteSchema).parse(unwrap(await this.jiraCall(grant, 'getAccessibleAtlassianResources', {})));
     return this.transport.get('jira', '/oauth/token/accessible-resources', await this.access(grant, 'jira'), z.array(siteSchema)); }
   async projects(grant: string, cloudId: string) {
     if (!(await this.sites(grant)).some(s => s.id === cloudId)) throw new AppError('OAUTH_SITE_NOT_FOUND');
-    if (await this.isMcp(grant)) return mcpProjects(async (name, args) => this.transport.mcp(await this.access(grant, 'jira'), name, args), cloudId);
+    if (await this.isMcp(grant)) return mcpProjects(async (name, args) => this.jiraCall(grant, name, args), cloudId);
     const token = await this.access(grant, 'jira'), result: z.infer<typeof choiceSchema>[] = [];
     for (let start = 0; ; ) {
       const page = await this.transport.get('jira', `/ex/jira/${cloudId}/rest/api/3/project/search?startAt=${start}&maxResults=100`, token, z.object({ values: z.array(choiceSchema), isLast: z.boolean(), total: z.number() }));

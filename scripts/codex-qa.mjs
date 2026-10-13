@@ -1,0 +1,43 @@
+import assert from 'node:assert/strict';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {serve} from '@hono/node-server';
+import {chromium} from 'playwright';
+import {Runtime} from '../dist/runtime.js';
+import {createApp} from '../dist/server.js';
+import {AppError} from '../dist/core/model.js';
+const dir=await mkdtemp(join(tmpdir(),'release-codex-qa-'));
+let browser,server,runtime,authorized=true,complete,logins=0;
+const cloud='11111111-1111-4111-8111-111111111111';
+const bridge={available:()=>true,close:()=>{},login:async callback=>{logins++;complete=callback;return 'https://auth.atlassian.com/authorize';},read:async name=>{
+ if(!authorized)throw new AppError('CODEX_READ_FAILED');
+ if(name==='getAccessibleAtlassianResources')return [{id:cloud,name:'Fictional',url:'https://fictional.atlassian.net'}];
+ if(name==='listJiraProjects')return {values:[{id:'100',key:'DEMO',name:'Fictional'}],isLast:true};
+ throw new Error('Unexpected read');
+}};
+try{
+ runtime=await Runtime.create({demo:true,settingsPath:join(dir,'connections.json'),codex:bridge});
+ server=serve({fetch:createApp(runtime).fetch,hostname:'127.0.0.1',port:0});if(!server.listening)await new Promise(r=>server.once('listening',r));
+ browser=await chromium.launch({channel:'chrome',headless:true});const context=await browser.newContext();
+ await context.route('https://auth.atlassian.com/**',r=>r.fulfill({contentType:'text/html',body:'Fictional Codex approval'}));
+ const page=await context.newPage();page.setDefaultTimeout(7000);page.on('dialog',d=>d.accept());
+ await page.goto(`http://127.0.0.1:${server.address().port}/settings.html`);
+ await page.getByRole('button',{name:'Jira 로그인',exact:true}).click();
+ await page.getByRole('button',{name:'Jira 로그인됨',exact:true}).waitFor();
+ assert.equal(logins,0);assert.equal(context.pages().length,1);
+ assert.equal(await page.getByRole('button',{name:'Jira 로그인됨',exact:true}).isDisabled(),true);
+ await page.getByText('연결 확인 시각:',{exact:false}).waitFor();
+ await page.getByRole('button',{name:'로컬 로그아웃',exact:true}).click();
+ await page.getByRole('button',{name:'Jira 로그인',exact:true}).waitFor();
+ assert.equal(authorized,true);
+ const card=page.locator('.oauth-card').first();assert.equal(await card.getByRole('button').count(),1);
+ authorized=false;
+ await page.getByRole('button',{name:'Jira 로그인',exact:true}).click();
+ await page.getByRole('button',{name:'로그인 취소',exact:true}).waitFor();assert.equal(logins,1);
+ await page.reload();await page.getByRole('button',{name:'로그인 취소',exact:true}).waitFor();
+ authorized=true;complete(true);
+ await page.getByRole('button',{name:'Jira 로그인됨',exact:true}).waitFor();
+ assert.equal((await runtime.oauth.view()).grants.length,1);
+ console.log(JSON.stringify({verdict:'PASS',scenarios:['existing Codex auth reused with no browser','local logout leaves Codex authenticated and one login button','missing auth opens Codex consent','reopened settings observes successful consent','connection timestamp and disabled login refreshed']}));
+}finally{if(browser)await browser.close();if(runtime)await runtime.shutdown();if(server)await new Promise(r=>server.close(r));await rm(dir,{recursive:true,force:true});}

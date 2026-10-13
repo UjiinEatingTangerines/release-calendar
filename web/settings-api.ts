@@ -16,6 +16,13 @@ export async function settingsSync(project: string) {
 }
 export async function errorMessage(error: unknown): Promise<string> {
   const messages: Record<string, string> = {
+    CODEX_CLI_MISSING: 'Codex CLI를 설치한 뒤 앱을 다시 시작하세요.',
+    CODEX_MCP_CONFIG_UNSUPPORTED: 'Codex의 atlassian MCP가 비활성화됐거나 다른 주소를 사용합니다. 기존 설정을 확인하세요.',
+    CODEX_RPC_FAILED: 'Codex의 Atlassian 연결을 확인하지 못했습니다. Codex 버전과 MCP 인증을 확인하세요.',
+    CODEX_CONNECTION_FAILED: 'Codex 연결이 종료됐습니다. 다시 로그인하여 연결을 확인하세요.',
+    CODEX_TIMEOUT: 'Codex 연결 확인 시간이 초과됐습니다. 잠시 후 다시 시도하세요.',
+    CODEX_READ_FAILED: 'Codex는 연결됐지만 Jira 조회가 실패했습니다. 사이트 조회 권한을 확인하세요.',
+    CODEX_RESPONSE_INVALID: 'Codex 응답 형식을 처리하지 못했습니다. 앱과 Codex 버전을 확인하세요.',
     GITHUB_CLI_MISSING: 'GitHub CLI(gh)를 설치한 뒤 앱을 다시 시작하세요.',
     GITHUB_LOGIN_FAILED: 'GitHub 인증을 완료하지 못했습니다. 브라우저 승인 상태를 확인하고 다시 로그인하세요.',
     OAUTH_REGISTRATION_FAILED: 'Atlassian 로그인 준비에 실패했습니다. 네트워크 연결을 확인하고 다시 눌러 주세요.',

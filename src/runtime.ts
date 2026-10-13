@@ -6,17 +6,18 @@ import { Queries } from './core/query.js';
 import { demoState } from './demo.js';
 import type { GithubBrowser } from './auth/github-browser.js';
 import type { OAuthTransport } from './auth/transport.js';
+import { CodexAtlassian, type CodexConnection } from './auth/codex.js';
 import { OAuth } from './auth/service.js';
 import { Connections } from './settings/connections.js';
 import { Store } from './storage.js';
 import { connectors, syncProject } from './sync.js';
 
-export type RuntimeOptions = { readonly githubBrowser?: GithubBrowser; readonly oauthTransport?: OAuthTransport; readonly oauthPort?: number; readonly config?: string | undefined; readonly settingsPath?: string | undefined; readonly dataDir?: string | undefined; readonly demo?: boolean | undefined; readonly demoAt?: string | undefined };
+export type RuntimeOptions = { readonly codex?: CodexConnection; readonly githubBrowser?: GithubBrowser; readonly oauthTransport?: OAuthTransport; readonly oauthPort?: number; readonly config?: string | undefined; readonly settingsPath?: string | undefined; readonly dataDir?: string | undefined; readonly demo?: boolean | undefined; readonly demoAt?: string | undefined };
 export class Runtime {
   readonly oauth: OAuth;
   private readonly syncAbort = new AbortController();
   private readonly syncing = new Map<string, Promise<State>>();
-  private constructor(readonly connections: Connections, readonly options: RuntimeOptions) { this.oauth = new OAuth(`${connections.store.path}.oauth.json`, options.oauthTransport, options.oauthPort, options.githubBrowser); }
+  private constructor(readonly connections: Connections, readonly options: RuntimeOptions) { this.oauth = new OAuth(`${connections.store.path}.oauth.json`, options.oauthTransport, options.oauthPort, options.githubBrowser, options.codex ?? (options.oauthTransport ? undefined : new CodexAtlassian())); }
   get config() { return this.connections.config; }
   get demo() { return this.connections.demo; }
   static async create(options: RuntimeOptions) {

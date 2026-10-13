@@ -29,7 +29,7 @@ describe('Browser OAuth', () => {
     const f = await fixture(async input => { const request = new Request(input); requests.push(request); return json(token); });
     try {
       await f.oauth.configure('github', { clientId: 'fictional-client', clientSecret: 'fictional-secret' });
-      const attempt = await f.oauth.start('github'), authorize = new URL(attempt.url);
+      const attempt = await f.oauth.start('github'), authorize = new URL(attempt.url ?? '');
       expect(authorize.searchParams.get('code_challenge_method')).toBe('S256');
       // When the browser returns a valid authorization code.
       const callback = new URL(f.oauth.callback('github')); callback.search = new URLSearchParams({ state: authorize.searchParams.get('state') ?? '', code: 'fictional-code' }).toString();
@@ -62,7 +62,7 @@ describe('Browser OAuth', () => {
     try {
       // Given a pending login and its valid state.
       await f.oauth.configure('jira', { clientId: 'fictional-client', clientSecret: 'fictional-secret' });
-      const attempt = await f.oauth.start('jira'), state = new URL(attempt.url).searchParams.get('state') ?? '';
+      const attempt = await f.oauth.start('jira'), state = new URL(attempt.url ?? '').searchParams.get('state') ?? '';
       // When the user denies consent.
       await fetch(`${f.oauth.callback('jira')}?state=${state}&error=access_denied`);
       // Then only a safe error remains and the local callback server is closed.
@@ -181,7 +181,7 @@ describe('Browser OAuth', () => {
     try {
       // Given an exchange that is waiting for its provider response.
       await f.oauth.configure('jira', { clientId: 'fictional', clientSecret: 'fictional' });
-      const attempt = await f.oauth.start('jira'), state = new URL(attempt.url).searchParams.get('state') ?? '';
+      const attempt = await f.oauth.start('jira'), state = new URL(attempt.url ?? '').searchParams.get('state') ?? '';
       const response = fetch(`${f.oauth.callback('jira')}?state=${state}&code=fictional`);
       await arrived;
       // When cancellation precedes the successful provider response.
@@ -201,7 +201,7 @@ describe('Browser OAuth', () => {
       await f.oauth.forget(id);
       expect(await readFile(f.oauth.store.path, 'utf8')).not.toContain('old-refresh');
       // When the same grant is reauthorized in the browser.
-      const attempt = await f.oauth.start('github', id), state = new URL(attempt.url).searchParams.get('state') ?? '';
+      const attempt = await f.oauth.start('github', id), state = new URL(attempt.url ?? '').searchParams.get('state') ?? '';
       await fetch(`${f.oauth.callback('github')}?state=${state}&code=fictional`);
       // Then no new grant ID is introduced and existing project references can use the new token.
       expect(f.oauth.status(attempt.id).grantId).toBe(id);

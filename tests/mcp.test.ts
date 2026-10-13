@@ -26,7 +26,7 @@ describe('Atlassian browser connection', () => {
     try {
       expect((await oauth.view()).apps.jira).toBe(true);
       const pending = await oauth.start('jira');
-      const url = new URL(pending.url);
+      const url = new URL(pending.url ?? '');
       expect(url.origin).toBe('https://auth.atlassian.com');
       expect(url.searchParams.get('code_challenge_method')).toBe('S256');
       expect(url.searchParams.get('scope')).not.toMatch(/write|delete|manage/);

@@ -46,7 +46,7 @@ pnpm start
 2. 설정 화면으로 돌아와 접근 가능한 Jira 사이트·프로젝트와 GitHub 저장소를 선택합니다.
 3. **선택한 대상으로 연결**을 누르면 저장 후 첫 일정을 동기화합니다. 앱·웹·CLI가 같은 로컬 인증을 사용합니다.
 
-**Jira는 앱 등록 정보 입력 없이 브라우저에서 로그인합니다.** 공식 Atlassian MCP v2 인증 서버에서 공개 클라이언트 메타데이터(CIMD)와 PKCE로 승인받습니다. 이 앱에 저장된 인증은 다음 실행에서도 재사용합니다. Codex·Claude·브라우저의 다른 인증 저장소에서 토큰을 추출하거나 복사하지 않습니다. **GitHub도 Client ID·secret 입력 없이 브라우저에서 인증합니다.** 설치된 GitHub CLI(`gh`)로 일회용 코드를 발급받아 GitHub 화면에서 승인합니다. `gh`가 없으면 `brew install gh` 후 앱을 다시 실행하세요. GitHub CLI 승인 권한은 쓰기를 포함할 수 있지만 앱은 허용된 GET 조회만 수행합니다. 기존 터미널 계정 설정은 변경하지 않습니다. [제공자별 로그인 안내](docs/oauth.md)를 참고하세요.
+**Jira는 Codex의 Atlassian 인증을 재사용합니다.** Jira 로그인 버튼은 실제 조회로 기존 인증을 확인하고, 인증이 없으면 Codex를 통해 브라우저 승인을 엽니다. 앱은 토큰을 복사하지 않고 Codex App Server의 읽기 도구만 호출합니다. Codex CLI 0.162.1에서 검증했으며 모델 실행은 사용하지 않습니다. 로컬 로그아웃은 앱 연결만 해제합니다. **GitHub도 Client ID·secret 입력 없이 브라우저에서 인증합니다.** 설치된 GitHub CLI(`gh`)로 일회용 코드를 발급받아 GitHub 화면에서 승인합니다. `gh`가 없으면 `brew install gh` 후 앱을 다시 실행하세요. GitHub CLI 승인 권한은 쓰기를 포함할 수 있지만 앱은 허용된 GET 조회만 수행합니다. 기존 터미널 계정 설정은 변경하지 않습니다. [제공자별 로그인 안내](docs/oauth.md)를 참고하세요.
 
 기존 토큰 방식은 **저장된 연결 관리 · 고급 수동 설정** 안에서 사용할 수 있습니다. 저장된 이메일·토큰은 다시 화면에 내려보내지 않고 수정 시 비워두면 유지합니다. OAuth 로그인 정보 삭제는 연결 해제와 별개이며 다른 연결에서도 같은 로그인을 사용할 수 있습니다.
 
@@ -122,7 +122,7 @@ pnpm test:settings
 
 브라우저 검증은 설치된 Chrome을 별도 자동화 프로필로 사용하고 `finally`에서 닫습니다. Chrome이 없으면 `pnpm exec playwright install chromium` 후 `QA_BROWSER_CHANNEL=chromium pnpm test:browser`를 사용하세요. 테스트 증거는 Git에서 제외된 `artifacts/`에 생성됩니다. [검증 결과와 한계](docs/verification.md), [구조/API 계약](docs/architecture.md)을 참고하세요.
 
-**실제 Jira/개인 GitHub 데이터 연동은 시험하지 않았습니다.** 데모, 가상 HTTP 응답 계약, 실제 로컬 서버·CLI·브라우저를 검증했습니다. 테스트용 실제 티켓·버전·PR은 만들지 않았습니다. Jira Data Center, GitHub Enterprise, MCP 서버, 반복 슬롯, 다중 사용자·외부 배포는 첫 버전 범위 밖입니다.
+**Codex 기존 인증을 이용한 실제 Jira 릴리스 조회와 연결된 GitHub 동기화를 검증했습니다. 신규 Codex 브라우저 승인은 가상 응답으로 검증했으며 실제 새 계정 승인은 별도 확인이 필요합니다.** 데모, 가상 HTTP 응답 계약, 실제 로컬 서버·CLI·브라우저를 검증했습니다. 테스트용 실제 티켓·버전·PR은 만들지 않았습니다. Jira Data Center, GitHub Enterprise, MCP 서버, 반복 슬롯, 다중 사용자·외부 배포는 첫 버전 범위 밖입니다.
 
 공식 API 근거: [Jira 프로젝트 버전](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-project-versions/), [Jira enhanced issue search](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-search/), [GitHub PR/commits](https://docs.github.com/en/rest/pulls/pulls), [GitHub checks](https://docs.github.com/en/rest/checks/runs), [GitHub commit statuses](https://docs.github.com/en/rest/commits/statuses), [Zod](https://zod.dev/api), [ky](https://github.com/sindresorhus/ky), [Hono Node.js](https://hono.dev/docs/getting-started/nodejs), [Vite](https://vite.dev/guide/).
 
