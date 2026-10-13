@@ -11,6 +11,7 @@ import { siteSchema, choiceSchema, repoSchema, type Provider, type AttemptView, 
 export class OAuth {
   readonly store: AuthStore;
   private listener: Server | undefined;
+  private activeProvider: Provider | undefined;
   private githubTask: Promise<void> | undefined;
   private githubAbort: AbortController | undefined;
   private timeout: ReturnType<typeof setTimeout> | undefined;
@@ -19,13 +20,21 @@ export class OAuth {
   callback(provider: Provider) { return `http://127.0.0.1:${this.port}/callback/${provider}`; }
   async view() {
     const doc = await this.store.read();
-    return { apps: { jira: true, github: !!doc.clients.github || this.githubBrowser.available() }, callback: `http://127.0.0.1:${this.port}/callback/`, grants: doc.grants.map(g => ({ id: g.id, provider: g.provider, createdAt: g.createdAt, reconnect: (g.provider === 'jira' && doc.clients.jira?.kind === 'mcp') || !g.accessToken || (expired(g) && !g.refreshToken) })) };
+    const pending = [...this.attempts.values()].find(a => a.status === 'pending');
+    return { ...(pending && this.activeProvider ? { pendingAttempt: { id: pending.id, provider: this.activeProvider } } : {}), apps: { jira: true, github: !!doc.clients.github || this.githubBrowser.available() }, callback: `http://127.0.0.1:${this.port}/callback/`, grants: doc.grants.map(g => ({ id: g.id, provider: g.provider, createdAt: g.createdAt, reconnect: (g.provider === 'jira' && doc.clients.jira?.kind === 'mcp') || !g.accessToken || (expired(g) && !g.refreshToken) })) };
   }
   async configure(provider: Provider, client: Client) {
     if (this.listener || this.githubAbort) throw new AppError('OAUTH_IN_PROGRESS');
     await this.store.update(async doc => ({ ...doc, clients: { ...doc.clients, [provider]: client }, grants: doc.grants.map(g => g.provider === provider ? { id: g.id, provider: g.provider, createdAt: g.createdAt, accessToken: null } : g) }));
   }
-  async forget(id: string) { await this.store.update(async doc => ({ ...doc, grants: doc.grants.map(g => g.id === id ? { id: g.id, provider: g.provider, createdAt: g.createdAt, accessToken: null } : g) })); }
+  async forget(id: string) {
+    const doc = await this.store.read();
+    const grant = doc.grants.find(g => g.id === id);
+    if (grant?.provider === this.activeProvider) {
+      const pending = [...this.attempts.values()].find(a => a.status === 'pending');
+      if (pending) this.cancel(pending.id);
+    }
+    await this.store.update(async doc => ({ ...doc, grants: doc.grants.map(g => g.id === id ? { id: g.id, provider: g.provider, createdAt: g.createdAt, accessToken: null } : g) })); }
   async access(id: string, provider: Provider): Promise<string> {
     const doc = await this.store.read(), grant = doc.grants.find(g => g.id === id && g.provider === provider);
     if (provider === 'jira' && doc.clients.jira?.kind === 'mcp') throw new AppError('OAUTH_REAUTHORIZE');
@@ -43,6 +52,7 @@ export class OAuth {
     if (!token) throw new AppError('OAUTH_REAUTHORIZE'); return token;
   }
   close() {
+    this.activeProvider = undefined;
     this.githubAbort?.abort(); this.githubAbort = undefined;
     if (this.timeout) clearTimeout(this.timeout);
     this.listener?.close(); this.listener?.closeIdleConnections(); this.listener = undefined;
@@ -54,6 +64,7 @@ export class OAuth {
     if (this.listener || this.githubAbort) throw new AppError('OAUTH_IN_PROGRESS');
     if (!this.githubBrowser.available()) throw new AppError('GITHUB_CLI_MISSING');
     const controller = new AbortController(); this.githubAbort = controller;
+    this.activeProvider = 'github';
     const id = randomUUID(); this.attempts.clear(); this.attempts.set(id, { id, status: 'pending' });
     this.timeout = setTimeout(() => { this.attempts.set(id, { id, status: 'error', code: 'OAUTH_EXPIRED' }); this.close(); }, 10 * 60 * 1000); this.timeout.unref();
     const startup = setTimeout(() => { this.attempts.set(id, { id, status: 'error', code: 'GITHUB_LOGIN_FAILED' }); this.close(); }, 30000); startup.unref();
@@ -91,6 +102,8 @@ export class OAuth {
       current = await this.store.update(async doc => ({ ...doc, clients: { ...doc.clients, jira: registered }, grants: doc.grants.map(g => g.provider === 'jira' ? { id: g.id, provider: g.provider, createdAt: g.createdAt, accessToken: null } : g) }));
     }
     const client = current.clients[provider];
+    const grants = current.grants.filter(g => g.provider === provider);
+    if (!replaceId && grants.length === 1) replaceId = grants[0]?.id;
     if (replaceId && !current.grants.some(g => g.id === replaceId && g.provider === provider)) throw new AppError('OAUTH_REAUTHORIZE');
     if (provider === 'github' && !client) return this.startGithub(replaceId);
     if (!client) throw new AppError('OAUTH_APP_REQUIRED');
@@ -128,6 +141,7 @@ export class OAuth {
     this.listener = listener;
     try { await new Promise<void>((resolve, reject) => { listener.once('error', reject); listener.listen(this.port, '127.0.0.1', () => resolve()); }); }
     catch (error) { this.close(); if (error instanceof Error) throw new AppError('OAUTH_CALLBACK_PORT_BUSY'); throw error; }
+    this.activeProvider = provider;
     listener.unref(); this.attempts.clear(); this.attempts.set(id, { id, status: 'pending' });
     this.timeout = setTimeout(() => { this.attempts.set(id, { id, status: 'error', code: 'OAUTH_EXPIRED' }); this.close(); }, 10 * 60 * 1000); this.timeout.unref();
     const url = new URL(provider === 'jira' ? (client.kind === 'mcp' ? `${mcpOrigin}/v1/authorize` : 'https://auth.atlassian.com/authorize') : 'https://github.com/login/oauth/authorize');

@@ -12,6 +12,6 @@ export const siteSchema = z.object({ id: z.uuid(), name: z.string(), url: z.url(
 export const choiceSchema = z.object({ id: z.string(), key: z.string(), name: z.string() });
 export const repoSchema = z.object({ id: z.number(), full_name: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/) });
 export const selectionSchema = z.object({ revision: z.string(), name: z.string().trim().min(1).max(200), timezone: z.string(), jiraGrant: z.uuid(), cloudId: z.uuid(), projectKey: z.string(), githubGrant: z.uuid().optional(), repositories: z.array(z.string()).default([]) });
-export const authViewSchema = z.object({ apps: z.object({ jira: z.boolean(), github: z.boolean() }), callback: z.string(), grants: z.array(grantSchema.pick({ id: true, provider: true, createdAt: true }).extend({ reconnect: z.boolean() })) });
+export const authViewSchema = z.object({ apps: z.object({ jira: z.boolean(), github: z.boolean() }), callback: z.string(), pendingAttempt: z.object({ id: z.string(), provider: providerSchema }).optional(), grants: z.array(grantSchema.pick({ id: true, provider: true, createdAt: true }).extend({ reconnect: z.boolean() })) });
 export const attemptSchema = z.object({ id: z.string(), status: z.enum(['pending', 'complete', 'error']), code: z.string().optional(), userCode: z.string().optional(), grantId: z.string().optional() });
 export type AttemptView = z.infer<typeof attemptSchema>;
