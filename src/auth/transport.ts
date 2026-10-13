@@ -32,7 +32,7 @@ export class OAuthTransport {
   async get<T>(provider: Provider, path: string, token: string, schema: z.ZodType<T>) {
     const allowed = provider === 'jira'
       ? [/^\/oauth\/token\/accessible-resources$/, /^\/ex\/jira\/[0-9a-f-]+\/rest\/api\/3\/project\/search$/]
-      : [/^\/user\/installations$/, /^\/user\/installations\/\d+\/repositories$/];
+      : [/^\/user\/repos$/, /^\/user\/installations$/, /^\/user\/installations\/\d+\/repositories$/];
     if (!allowed.some(rule => rule.test(path.split('?')[0] ?? ''))) throw new AppError('READ_ENDPOINT_NOT_ALLOWED');
     try { return schema.parse(await this.http.get(`${provider === 'jira' ? 'https://api.atlassian.com' : 'https://api.github.com'}${path}`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } }).json<unknown>()); }
     catch (error) { if (error instanceof Error) throw new AppError('OAUTH_DISCOVERY_FAILED'); throw error; }

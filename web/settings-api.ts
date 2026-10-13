@@ -16,6 +16,8 @@ export async function settingsSync(project: string) {
 }
 export async function errorMessage(error: unknown): Promise<string> {
   const messages: Record<string, string> = {
+    GITHUB_CLI_MISSING: 'GitHub CLI(gh)를 설치한 뒤 앱을 다시 시작하세요.',
+    GITHUB_LOGIN_FAILED: 'GitHub 인증을 완료하지 못했습니다. 브라우저 승인 상태를 확인하고 다시 로그인하세요.',
     OAUTH_REGISTRATION_FAILED: 'Atlassian 로그인 준비에 실패했습니다. 네트워크 연결을 확인하고 다시 눌러 주세요.',
     MCP_CONNECTION_FAILED: 'Atlassian 연결을 확인하지 못했습니다. 다시 로그인하거나 잠시 후 재시도하세요.',
     MCP_READ_TOOL_UNAVAILABLE: '현재 Atlassian 연결에 필요한 조회 기능이 없습니다. 조회 권한과 조직 정책을 확인하세요.',

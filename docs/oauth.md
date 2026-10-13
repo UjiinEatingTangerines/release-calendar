@@ -13,21 +13,24 @@
 
 공식 MCP의 동적 클라이언트 등록과 authorization-code + PKCE S256을 사용합니다. 요청 범위는 `read:jira:agent-interface search:jira:agent-interface offline_access`입니다. 조직의 앱 허용 정책과 조회 권한이 적용됩니다. 이 경로는 REST API용 토큰으로 가장하지 않고 MCP 읽기 도구로 조회합니다. [인증 안내](https://developer.atlassian.com/cloud/rovo-mcp/guides/authentication-and-authorization/)와 [지원 도구](https://developer.atlassian.com/cloud/rovo-mcp/guides/supported-tools/)를 참고하세요.
 
-## GitHub.com: 기존 앱 소유자 등록 방식
+## GitHub.com: GitHub CLI 브라우저 인증
 
-1. [GitHub App 등록](https://github.com/settings/apps/new)에서 개인 계정 소유의 앱을 생성합니다. 일반 OAuth App이 아닌 **GitHub App**입니다.
-2. callback을 `http://127.0.0.1:4318/callback/github`로 등록하고 Webhook을 끕니다.
-3. Repository permissions의 Metadata, Contents, Pull requests, Checks, Commit statuses만 **Read-only**로 설정합니다. 쓰기 권한을 넣지 마세요.
-4. 앱에서 Client secret을 생성하고 Client ID와 함께 로컬 설정에 저장합니다.
-5. **Install App**에서 사용할 계정·저장소에 설치한 뒤 **GitHub 로그인**을 누릅니다. 조직 설치는 관리자 승인이 필요할 수 있습니다.
+1. GitHub CLI(`gh`)가 설치되어 있어야 합니다. macOS에서는 `brew install gh`로 설치할 수 있습니다.
+2. **GitHub 로그인**을 누릅니다. 앱에 일회용 코드와 **인증 코드 복사** 버튼이 나타나고 기본 브라우저의 GitHub 기기 인증 화면이 열립니다.
+3. 코드와 로그인할 계정을 확인하고 승인합니다. Client ID·client secret·개인 토큰을 입력하지 않습니다.
+4. 앱으로 돌아오면 접근 가능한 저장소를 선택할 수 있습니다. 최초 사용자 승인, 조직 정책 및 SSO 승인은 여전히 필요합니다.
 
-GitHub App 사용자 토큰은 앱과 사용자 양쪽이 접근 가능한 저장소를 조회합니다. 설치된 저장소를 페이지 끝까지 읽고, 설치에 쓰기 권한이 있으면 연결 대상 선택을 거부합니다. 로그인은 state 및 PKCE S256을 사용하는 authorization-code 방식입니다. [공식 인증 안내](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app)를 참고하세요.
+공식 `gh auth login --web` 흐름을 사용하며 GitHub CLI의 클라이언트 ID를 코드에 복제하지 않습니다. 로그인은 격리된 임시 `GH_CONFIG_DIR`에서 실행합니다. 기존 `GH_TOKEN`·`GITHUB_TOKEN`, 터미널의 활성 계정, Git 자격증명 설정과 공유 키체인은 사용하거나 변경하지 않습니다. CLI의 일시적인 평문 저장은 소유자 전용 임시 디렉터리 안에서만 이루어지고 성공·실패·취소 시 삭제됩니다. 인증 토큰은 앱의 기존 0600 로컬 인증 저장소에 옮겨 이후 웹·앱·CLI가 재사용합니다. OS 강제 종료 등으로 정리가 중단되면 임시 폴더 `release-calendar-gh-*`가 남을 수 있습니다.
+
+**GitHub CLI 승인은 `repo`, `read:org`, `gist` 등 쓰기를 포함하는 범위일 수 있습니다. 토큰 자체가 읽기 전용이라는 뜻은 아닙니다.** 앱은 저장소 목록·PR·커밋·검사에 대해 허용한 GET만 사용하고 쓰기 명령을 실행하지 않습니다. 제한된 토큰이 필요한 사용자는 고급 수동 설정을 사용할 수 있습니다. 기존 GitHub App 인증은 호환성을 위해 유지합니다.
+
+미설치·승인 거부·실행 실패·취소·10분 만료를 상태로 표시합니다. 로그인 준비 단계는 30초 제한이며 앱 종료 시 소유한 로그인 프로세스를 중단하고 임시 디렉터리를 정리합니다. 일반 브라우저와 기존 GitHub CLI 세션은 종료하지 않습니다. [공식 CLI 로그인 안내](https://cli.github.com/manual/gh_auth_login)를 참고하세요.
 
 ## 로컬 처리와 제한
 
 - 앱 소유자 정보·액세스/갱신 토큰은 `~/.config/release-calendar/connections.json.oauth.json`에 0600으로 저장합니다. 암호화·Keychain 저장은 제공하지 않습니다. 사용자 지정 설정은 기존 관리 파일 뒤에 `.oauth.json`을 붙인 경로를 사용합니다.
 - 브라우저와 앱에는 상태와 로컬 인증 식별자만 내려보냅니다. 저장된 토큰이나 client secret은 반환하지 않습니다. 앱·웹·CLI가 같은 인증 저장소를 읽습니다.
-- 로그인할 때만 `127.0.0.1:4318` 콜백 서버를 열며 완료·거부·취소·10분 만료·앱 종료 시 닫습니다. 웹 달력 서버의 포트와는 별개입니다. 다른 창/프로그램이 사용 중이면 안내 후 중단합니다.
+- Jira 및 기존 GitHub App 로그인에서는 `127.0.0.1:4318` 콜백 서버를 열며 완료·거부·취소·10분 만료·앱 종료 시 닫습니다. 웹 달력 서버의 포트와는 별개입니다. 다른 창/프로그램이 사용 중이면 안내 후 중단합니다.
 - 외부 POST는 인증 등록·교환·갱신과 MCP 프로토콜 전송에 사용합니다. MCP 호출은 `getAccessibleAtlassianResources`, `listJiraProjects`, `getJiraProjectVersions`, `searchJiraIssuesUsingJql`로 제한합니다. 그 밖의 도구와 쓰기·삭제 호출은 전송 전에 거부합니다. 기존 REST/GitHub 조회는 GET입니다.
 - **로컬 로그아웃**는 로컬 토큰만 삭제합니다. 기존 연결을 복구할 수 있도록 비밀이 아닌 로컬 인증 ID는 남깁니다. **다시 인증**은 같은 ID에 새 토큰을 저장하여 기존 연결과 캐시를 유지합니다. 제공자에서 앱 승인을 철회하거나 앱을 삭제하는 작업은 각 서비스에서 직접 합니다. **연결 해제**와 OAuth 로그인 삭제는 별도입니다. 전체 로컬 인증을 제거하려면 OAuth 파일과 기존 credentials.json·환경변수도 확인하세요.
 - 앱 등록 정보를 바꾸면 해당 제공자의 기존 토큰을 제거하고 다시 인증 상태로 표시합니다. 로그인 갱신은 파일 잠금 안에서 처리하여 여러 프로세스가 같은 회전형 갱신 토큰을 동시에 소비하지 않게 합니다. 갱신 실패 시 원본 캐시를 삭제하지 않습니다.

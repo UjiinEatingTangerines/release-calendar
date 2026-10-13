@@ -8,7 +8,7 @@ export function oauthPanel(csrf: string, saved: () => void) {
   const root = node('section', '', 'oauth-panel'); root.setAttribute('aria-label', '브라우저 로그인으로 연결');
   const notice = node('p', '', 'settings-notice'); notice.setAttribute('role', 'status');
   const cards = node('div', '', 'oauth-cards'), choices = node('div', '', 'settings-card');
-  root.append(node('h2', '로그인으로 연결'), node('p', '브라우저에서 승인한 뒤 프로젝트와 저장소를 선택하세요. API 토큰을 복사하지 않아도 됩니다.', 'muted'), cards, choices, notice);
+  root.append(node('h2', '로그인으로 연결'), node('p', '브라우저에서 승인한 뒤 프로젝트와 저장소를 선택하세요. API 토큰을 복사하지 않아도 됩니다.', 'muted'), cards, notice, choices);
   const client = ky.create({ prefix: '/api/settings/oauth', retry: 0, timeout: 60000, headers: { 'X-Release-Settings': csrf } });
   let view: z.infer<typeof authViewSchema> | undefined;
   let jiraGrant = '', githubGrant = '', timer: ReturnType<typeof setTimeout> | undefined, pending = '', disposed = false, starting = false;
@@ -59,45 +59,35 @@ export function oauthPanel(csrf: string, saved: () => void) {
     if (starting || pending) return;
     starting = true; renderCards(); message('브라우저 로그인을 준비하고 있습니다…');
     try {
-    const result = z.object({ id: z.string(), url: z.url() }).parse(await client.post('start', { json: { provider, ...(grantId ? { grantId } : {}) } }).json());
-    pending = result.id; renderCards(); message('브라우저에서 로그인과 조회 권한 승인을 완료해 주세요.');
+    const result = z.object({ id: z.string(), url: z.url(), userCode: z.string().optional() }).parse(await client.post('start', { json: { provider, ...(grantId ? { grantId } : {}) } }).json());
+    pending = result.id; renderCards(); message('브라우저에서 로그인과 앱 승인을 완료해 주세요.');
+    if (result.userCode) {
+      notice.append(node('p', 'GitHub 화면에 아래 일회용 코드를 입력하고 승인하세요.'), node('strong', result.userCode));
+      const code = result.userCode;
+      const copy = button('인증 코드 복사', () => {
+        if (!navigator.clipboard) { copy.textContent = '코드를 직접 복사하세요'; return; }
+        void navigator.clipboard.writeText(code).then(() => { copy.textContent = '복사됨'; }, () => { copy.textContent = '코드를 직접 복사하세요'; });
+      });
+      notice.append(copy);
+    }
     const forward = link('브라우저에서 로그인 계속하기 ↗', result.url); notice.append(node('br'), forward);
-    forward.click(); void poll(result.id);
+    forward.click(); notice.scrollIntoView({ block: 'nearest' }); void poll(result.id);
     } finally { starting = false; renderCards(); }
-  }
-  function setup(provider: Provider, card: HTMLElement) {
-    const details = node('details', '', 'oauth-setup'); details.open = false; details.append(node('summary', '최초 1회 · 앱 소유자 등록 설정'));
-    details.append(node('p', '개인용 앱을 등록한 소유자가 한 번 설정합니다. 사용자 API 토큰이 아닙니다. 이미 등록된 앱이면 해당 앱 정보를 사용하세요.', 'small'));
-    details.append(link(provider === 'jira' ? 'Atlassian 개발자 콘솔 열기 ↗' : 'GitHub App 등록 화면 열기 ↗', provider === 'jira' ? 'https://developer.atlassian.com/console/myapps/' : 'https://github.com/settings/apps/new'));
-    details.append(node('p', `Callback URL: ${view?.callback ?? ''}${provider}`, 'oauth-callback small'));
-    details.append(node('p', provider === 'jira' ? 'OAuth 2.0 (3LO) 앱에 Jira API의 read:jira-work 권한을 추가하세요. 로그인 시 갱신용 offline_access도 요청합니다.' : 'GitHub App의 Metadata·Contents·Pull requests·Checks·Commit statuses를 Read-only로 설정하고 Webhook을 끄세요. 저장 후 사용할 저장소에 앱을 설치하세요. 일반 OAuth App은 사용하지 않습니다.', 'small'));
-    const form = node('form'); form.autocomplete = 'off';
-    const id = node('input'), secret = node('input'); id.id = `oauth-${provider}-client`; secret.id = `oauth-${provider}-secret`;
-    id.required = true; secret.required = true; id.autocomplete = 'off'; secret.type = 'password'; secret.autocomplete = 'new-password';
-    const idLabel = node('label', 'Client ID'); idLabel.htmlFor = id.id; const secretLabel = node('label', 'Client secret'); secretLabel.htmlFor = secret.id;
-    const save = node('button', '앱 등록 정보 저장'); save.type = 'submit';
-    form.append(idLabel, id, secretLabel, secret, save); details.append(form); card.append(details);
-    form.addEventListener('submit', event => {
-      event.preventDefault(); if (!form.reportValidity()) return;
-      if (view?.apps[provider] && !confirm('앱 등록 정보를 바꾸면 이 서비스의 기존 로그인이 해제됩니다. 계속할까요?')) return;
-      save.disabled = true;
-      void run(async () => { await client.post('configure', { json: { provider, clientId: id.value, clientSecret: secret.value } }); secret.value = ''; await refresh(); message('앱 등록 정보를 저장했습니다. 로그인 버튼을 눌러 연결하세요.'); }).finally(() => { save.disabled = false; });
-    });
   }
   function renderCards() {
     cards.replaceChildren();
     for (const provider of ['jira', 'github'] as const) {
       const label = provider === 'jira' ? 'Jira' : 'GitHub', card = node('div', '', 'settings-card oauth-card');
-      card.append(node('h3', label), tag(view?.apps[provider] ? '로그인 준비됨' : '앱 등록 필요', view?.apps[provider] ? 'development' : 'freeze'));
+      card.append(node('h3', label), tag(view?.apps[provider] ? '로그인 준비됨' : provider === 'github' ? 'GitHub CLI 필요' : '확인 중', view?.apps[provider] ? 'development' : 'freeze'));
       const ready = !!view?.apps[provider];
       const signIn = button(starting ? '로그인 준비 중…' : pending ? '브라우저 승인 대기 중' : ready ? `${label} 로그인` : `${label} 로그인 준비하기`, () => {
         if (ready) { void run(() => start(provider)); return; }
-        const details = card.querySelector('details');
-        if (details) { details.open = true; details.querySelector('summary')?.focus(); details.scrollIntoView({ block: 'nearest' }); }
+        message('GitHub CLI(gh)를 설치한 뒤 앱을 다시 시작하세요. 아래 설치 안내를 확인하세요.', true);
       }, 'primary');
       signIn.disabled = !view || !!pending || starting; card.append(signIn);
       if (view && !view.apps[provider]) {
-        const hint = node('p', '로그인 준비가 필요합니다. 아래 ‘최초 1회 · 앱 소유자 등록 설정’을 완료하면 로그인할 수 있습니다.', 'small');
+        const hint = node('p', 'GitHub CLI(gh)가 필요합니다. 설치 후 앱을 다시 시작하면 브라우저로 로그인할 수 있습니다.', 'small');
+        card.append(link('GitHub CLI 설치 안내 ↗', 'https://cli.github.com/'));
         hint.id = `oauth-${provider}-setup-hint`; signIn.setAttribute('aria-describedby', hint.id); card.append(hint);
       }
       const grants = view?.grants.filter(g => g.provider === provider) ?? [];
@@ -113,7 +103,7 @@ export function oauthPanel(csrf: string, saved: () => void) {
           void run(async () => { await client.post('forget', { json: { id: grant.id } }); if (jiraGrant === grant.id) { jiraGrant = ''; sites = []; projects = []; } if (githubGrant === grant.id) { githubGrant = ''; repositories = []; selectedRepos.clear(); } renderChoices(); await refresh(); });
         }, 'danger-action'));
       }
-      if (provider === 'github') setup(provider, card);
+      if (provider === 'github') card.append(node('p', 'GitHub CLI의 브라우저 인증을 사용합니다. 승인 권한에는 쓰기가 포함될 수 있지만 이 앱은 조회만 수행합니다. 기존 터미널 계정 설정은 변경하지 않습니다.', 'small'));
       else card.append(node('p', '브라우저에서 Atlassian에 로그인하고 승인하세요. 인증은 이 기기에 저장되며 다음 실행에서도 사용됩니다.', 'small'));
       cards.append(card);
     }

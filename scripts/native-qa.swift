@@ -61,6 +61,8 @@ struct NativeQA {
                 try check(heading == "연결 설정", "native-settings-loaded")
                 let loginCards = try await text(web, "String(document.querySelectorAll('.oauth-card').length)")
                 try check(loginCards == "2", "native-browser-login-cards")
+                let ownerInputs = try await text(web, "String(document.querySelectorAll('.oauth-card input').length)")
+                try check(ownerInputs == "0", "native-no-client-credential-inputs")
                 let secrets = try await text(web, "Array.from(document.querySelectorAll('input[type=password]')).map(x=>x.value).join('')")
                 try check(secrets.isEmpty, "native-settings-no-credential-prefill")
                 if let path = ProcessInfo.processInfo.environment["QA_SETTINGS_IMAGE"] {

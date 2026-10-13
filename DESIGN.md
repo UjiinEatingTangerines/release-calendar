@@ -123,4 +123,4 @@ Settings begins with two provider cards and a three-step sign-in → select reso
 
 Disabled actions use a default cursor, never a waiting cursor. An unconfigured login shows an enabled “로그인 준비하기” action opening and focusing its registration disclosure, plus a persistent explanation linked with aria-describedby; waiting for browser approval has a distinct visible label.
 
-Jira is ready for browser sign-in without owner fields. Its card explains browser consent and reuse of this app’s local authentication. GitHub retains its existing owner-registration disclosure; do not imply it has the same zero-input setup.
+Jira is ready for browser sign-in without owner fields. Its card explains browser consent and reuse of this app’s local authentication. GitHub has no owner-registration fields. It opens the official device login, shows the one-time code and a copy action, and explains the difference between CLI consent scopes and the app’s read-only operations. Missing gh shows an installation link; cancellation clears the code. Clipboard failure retains the visible code and browser link.

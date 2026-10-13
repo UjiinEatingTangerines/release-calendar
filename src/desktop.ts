@@ -13,9 +13,9 @@ try {
   let stopping = false;
   const stop = () => {
     if (stopping) return; stopping = true;
-    runtime.oauth.close(); server.close(() => process.exit(0));
+    void runtime.oauth.shutdown().finally(() => server.close(() => process.exit(0)));
     if (server instanceof Server) server.closeAllConnections();
-    setTimeout(() => process.exit(0), 1500).unref();
+    setTimeout(() => process.exit(0), 4000).unref();
   };
   // The app owns this pipe. EOF also cleans up after an app crash or force quit.
   process.stdin.resume(); process.stdin.once('end', stop);

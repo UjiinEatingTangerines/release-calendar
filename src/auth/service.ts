@@ -3,6 +3,7 @@ import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { z } from 'zod';
 import { AppError } from '../core/model.js';
 import { mcpOrigin, mcpProjects, mcpJiraReader, unwrap } from './mcp.js';
+import { GhBrowser, type GithubBrowser } from './github-browser.js';
 import { AuthStore } from './store.js';
 import { OAuthTransport, expired } from './transport.js';
 import { siteSchema, choiceSchema, repoSchema, type Provider, type AttemptView, type Client } from './model.js';
@@ -10,16 +11,18 @@ import { siteSchema, choiceSchema, repoSchema, type Provider, type AttemptView, 
 export class OAuth {
   readonly store: AuthStore;
   private listener: Server | undefined;
+  private githubTask: Promise<void> | undefined;
+  private githubAbort: AbortController | undefined;
   private timeout: ReturnType<typeof setTimeout> | undefined;
   private readonly attempts = new Map<string, AttemptView>();
-  constructor(path: string, readonly transport = new OAuthTransport(), readonly port = 4318) { this.store = new AuthStore(path); }
+  constructor(path: string, readonly transport = new OAuthTransport(), readonly port = 4318, readonly githubBrowser: GithubBrowser = new GhBrowser()) { this.store = new AuthStore(path); }
   callback(provider: Provider) { return `http://127.0.0.1:${this.port}/callback/${provider}`; }
   async view() {
     const doc = await this.store.read();
-    return { apps: { jira: true, github: !!doc.clients.github }, callback: `http://127.0.0.1:${this.port}/callback/`, grants: doc.grants.map(g => ({ id: g.id, provider: g.provider, createdAt: g.createdAt, reconnect: !g.accessToken || (expired(g) && !g.refreshToken) })) };
+    return { apps: { jira: true, github: !!doc.clients.github || this.githubBrowser.available() }, callback: `http://127.0.0.1:${this.port}/callback/`, grants: doc.grants.map(g => ({ id: g.id, provider: g.provider, createdAt: g.createdAt, reconnect: !g.accessToken || (expired(g) && !g.refreshToken) })) };
   }
   async configure(provider: Provider, client: Client) {
-    if (this.listener) throw new AppError('OAUTH_IN_PROGRESS');
+    if (this.listener || this.githubAbort) throw new AppError('OAUTH_IN_PROGRESS');
     await this.store.update(async doc => ({ ...doc, clients: { ...doc.clients, [provider]: client }, grants: doc.grants.map(g => g.provider === provider ? { id: g.id, provider: g.provider, createdAt: g.createdAt, accessToken: null } : g) }));
   }
   async forget(id: string) { await this.store.update(async doc => ({ ...doc, grants: doc.grants.map(g => g.id === id ? { id: g.id, provider: g.provider, createdAt: g.createdAt, accessToken: null } : g) })); }
@@ -39,13 +42,48 @@ export class OAuth {
     if (!token) throw new AppError('OAUTH_REAUTHORIZE'); return token;
   }
   close() {
+    this.githubAbort?.abort(); this.githubAbort = undefined;
     if (this.timeout) clearTimeout(this.timeout);
     this.listener?.close(); this.listener?.closeIdleConnections(); this.listener = undefined;
   }
+  async shutdown() { this.close(); await this.githubTask; }
   cancel(id: string) { const attempt = this.attempts.get(id); if (attempt?.status === 'pending') { this.attempts.set(id, { id, status: 'error', code: 'OAUTH_CANCELLED' }); this.close(); } }
   status(id: string) { const result = this.attempts.get(id); if (!result) throw new AppError('OAUTH_ATTEMPT_NOT_FOUND'); return result; }
+  private async startGithub(replaceId?: string) {
+    if (this.listener || this.githubAbort) throw new AppError('OAUTH_IN_PROGRESS');
+    if (!this.githubBrowser.available()) throw new AppError('GITHUB_CLI_MISSING');
+    const controller = new AbortController(); this.githubAbort = controller;
+    const id = randomUUID(); this.attempts.clear(); this.attempts.set(id, { id, status: 'pending' });
+    this.timeout = setTimeout(() => { this.attempts.set(id, { id, status: 'error', code: 'OAUTH_EXPIRED' }); this.close(); }, 10 * 60 * 1000); this.timeout.unref();
+    const startup = setTimeout(() => { this.attempts.set(id, { id, status: 'error', code: 'GITHUB_LOGIN_FAILED' }); this.close(); }, 30000); startup.unref();
+    let ready: () => void = () => {};
+    const codeReady = new Promise<void>(resolve => { ready = resolve; });
+    this.githubTask = (async () => {
+      try {
+        const token = await this.githubBrowser.login(controller.signal, userCode => {
+          if (controller.signal.aborted) return;
+          clearTimeout(startup); this.attempts.set(id, { id, status: 'pending', userCode }); ready();
+        });
+        const grantId = replaceId ?? randomUUID();
+        await this.store.update(async doc => {
+          if (controller.signal.aborted || this.attempts.get(id)?.status !== 'pending') throw new AppError('OAUTH_CANCELLED');
+          return { ...doc, grants: [...doc.grants.filter(g => g.id !== grantId), { id: grantId, provider: 'github', kind: 'github-cli', accessToken: token, createdAt: new Date().toISOString() }] };
+        });
+        this.attempts.set(id, { id, status: 'complete', grantId });
+      } catch (error) {
+        if (this.attempts.get(id)?.status === 'pending') this.attempts.set(id, { id, status: 'error', code: error instanceof AppError ? error.code : 'GITHUB_LOGIN_FAILED' });
+      } finally {
+        clearTimeout(startup); ready(); if (this.githubAbort === controller) { this.githubAbort = undefined; if (this.timeout) clearTimeout(this.timeout); }
+      }
+    })();
+    // Return promptly on startup failure, or once the user-facing verification code exists.
+    await codeReady;
+    const attempt = this.status(id);
+    if (attempt.status === 'error') throw new AppError(attempt.code ?? 'GITHUB_LOGIN_FAILED');
+    return { id, url: 'https://github.com/login/device', ...(attempt.userCode ? { userCode: attempt.userCode } : {}) };
+  }
   async start(provider: Provider, replaceId?: string) {
-    if (this.listener) throw new AppError('OAUTH_IN_PROGRESS');
+    if (this.listener || this.githubAbort) throw new AppError('OAUTH_IN_PROGRESS');
     let current = await this.store.read();
     if (provider === 'jira' && !current.clients.jira) {
       const registered = await this.transport.registerJira(this.callback(provider));
@@ -53,8 +91,9 @@ export class OAuth {
     }
     const client = current.clients[provider];
     if (replaceId && !current.grants.some(g => g.id === replaceId && g.provider === provider)) throw new AppError('OAUTH_REAUTHORIZE');
+    if (provider === 'github' && !client) return this.startGithub(replaceId);
     if (!client) throw new AppError('OAUTH_APP_REQUIRED');
-    if (this.listener) throw new AppError('OAUTH_IN_PROGRESS');
+    if (this.listener || this.githubAbort) throw new AppError('OAUTH_IN_PROGRESS');
     let consumed = false;
     const id = randomUUID(), state = randomBytes(32).toString('hex'), verifier = randomBytes(32).toString('base64url');
     const listener = createServer((req, res) => {
@@ -118,6 +157,15 @@ export class OAuth {
     }
   }
   async repositories(grant: string) {
+    const saved = (await this.store.read()).grants.find(g => g.id === grant && g.provider === 'github');
+    if (saved?.kind === 'github-cli') {
+      const repos: z.infer<typeof repoSchema>[] = [];
+      for (let page = 1; ; page++) {
+        const values = await this.transport.get('github', `/user/repos?per_page=100&page=${page}&sort=full_name&direction=asc`, await this.access(grant, 'github'), z.array(repoSchema));
+        if (values.some(v => repos.some(old => old.id === v.id))) throw new AppError('OAUTH_PAGINATION_INVALID');
+        repos.push(...values); if (values.length < 100) return repos;
+      }
+    }
     const token = await this.access(grant, 'github'), installations: number[] = [], repos = new Map<number, z.infer<typeof repoSchema>>();
     for (let page = 1; ; page++) {
       const data = await this.transport.get('github', `/user/installations?per_page=100&page=${page}`, token, z.object({ total_count: z.number(), installations: z.array(z.object({ id: z.number(), permissions: z.record(z.string(), z.string()) })) }));
