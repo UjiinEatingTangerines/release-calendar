@@ -18,6 +18,7 @@ await build({ entryPoints: ['src/desktop.ts'], outfile: join(resources, 'server/
   bundle: true, platform: 'node', format: 'esm', target: 'node22', legalComments: 'eof' });
 await cp('web-dist', join(resources, 'web-dist'), { recursive: true });
 await cp('docs/macos.md', join(resources, 'macos.md'));
+await cp('docs/oauth.md', join(resources, 'oauth.md'));
 await cp('examples/config.json', join(resources, 'config.example.json'));
 execFileSync('/usr/bin/xcrun', ['swiftc', '-O', '-parse-as-library', '-swift-version', '6',
   '-framework', 'AppKit', '-framework', 'WebKit', 'desktop/Models.swift', 'desktop/Backend.swift', 'desktop/App.swift', 'desktop/SettingsWindow.swift', 'desktop/Menu.swift', 'desktop/Tokens.swift', 'desktop/PopoverView.swift', 'desktop/Main.swift',
