@@ -24,6 +24,7 @@ try {
   // Provider requests are tested separately; never send fictional credentials to a live service.
   await page.route('**/api/refresh?**', route => route.fulfill({ json: { warnings: [] } }));
   await page.goto(`${address}/settings.html`);
+  await page.locator('.manual-connections > summary').click();
   await page.getByRole('button', { name: '연결 확인', exact: true }).waitFor();
   await page.locator('#connection-name').fill('Fictional Orbit');
   await page.locator('#jira-site').fill('fictional-orbit.atlassian.net');

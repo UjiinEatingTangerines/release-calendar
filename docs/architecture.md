@@ -57,4 +57,10 @@ Add a new collector producing the existing validated Release/Ticket/Pull records
 
 `Connections` serves web, native and CLI. A 0600 `connections.json` stores config and credentials in one atomic revision. A directory lock and optimistic revision prevent concurrent editors from overwriting each other. Host/Origin validation, a per-server CSRF header and a 64 KiB body limit protect local writes. The managed document takes precedence over legacy config; explicit config paths use a separate sidecar. Removing all managed entries persists an empty document rather than resurrecting legacy settings. Legacy source files remain untouched. Settings changes can alter the cache namespace; old observations remain on disk and new settings require fresh collection.
 
-The native settings window embeds the same web UI in nonpersistent WKWebView. External token issuance links open the normal browser. Neither surface implements OAuth registration or writes to provider APIs.
+The native settings window embeds the same web UI in nonpersistent WKWebView. External token issuance links open the normal browser. The shared OAuth controller supports browser authorization, local callback handling and rotating token refresh. Provider app registration remains an owner setup step. Business data APIs never receive mutations.
+
+## OAuth boundary
+
+`src/auth/` owns a separate private atomic auth document, one-use random state, GitHub S256 PKCE, a temporary loopback callback listener, provider discovery pagination, and serialized token rotation. `Runtime` injects a lazy OAuth bearer resolver into the existing GET readers; OAuth authentication failures therefore follow the existing last-good snapshot preservation path. Only the fixed Atlassian/GitHub token endpoints accept external POST. No generic outbound mutation method is exposed.
+
+Local `/api/settings/oauth` routes inherit settings CSRF, Origin and body-size guards. POST operations configure/start/cancel/forget/select; GET operations expose safe status and selectable resources. OAuth callbacks use a separate fixed-port listener so the native app's ephemeral web port does not need provider registration. App secrets and tokens never enter callback HTML or status JSON. A user selection is validated against newly fetched accessible resources before persisting a project.

@@ -13,7 +13,7 @@ try {
   let stopping = false;
   const stop = () => {
     if (stopping) return; stopping = true;
-    server.close(() => process.exit(0));
+    runtime.oauth.close(); server.close(() => process.exit(0));
     if (server instanceof Server) server.closeAllConnections();
     setTimeout(() => process.exit(0), 1500).unref();
   };

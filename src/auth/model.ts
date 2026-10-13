@@ -1,0 +1,17 @@
+import { z } from 'zod';
+export const providerSchema = z.enum(['jira', 'github']);
+export type Provider = z.infer<typeof providerSchema>;
+export const appInputSchema = z.object({ provider: providerSchema, clientId: z.string().trim().min(1).max(200), clientSecret: z.string().trim().min(1).max(8192) });
+export const clientSchema = appInputSchema.omit({ provider: true });
+export const grantSchema = z.object({ id: z.uuid(), provider: providerSchema, accessToken: z.string().min(1).nullable(), refreshToken: z.string().optional(), expiresAt: z.number().optional(), createdAt: z.string() });
+export type Grant = z.infer<typeof grantSchema>;
+export type Client = z.infer<typeof clientSchema>;
+export const authDocumentSchema = z.object({ version: z.literal(1), clients: z.object({ jira: clientSchema.optional(), github: clientSchema.optional() }), grants: z.array(grantSchema) });
+export type AuthDocument = z.infer<typeof authDocumentSchema>;
+export const siteSchema = z.object({ id: z.uuid(), name: z.string(), url: z.url().refine(v => /^https:\/\/[a-z0-9-]+\.atlassian\.net\/?$/.test(v)) });
+export const choiceSchema = z.object({ id: z.string(), key: z.string(), name: z.string() });
+export const repoSchema = z.object({ id: z.number(), full_name: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/) });
+export const selectionSchema = z.object({ revision: z.string(), name: z.string().trim().min(1).max(200), timezone: z.string(), jiraGrant: z.uuid(), cloudId: z.uuid(), projectKey: z.string(), githubGrant: z.uuid().optional(), repositories: z.array(z.string()).default([]) });
+export const authViewSchema = z.object({ apps: z.object({ jira: z.boolean(), github: z.boolean() }), callback: z.string(), grants: z.array(grantSchema.pick({ id: true, provider: true, createdAt: true }).extend({ reconnect: z.boolean() })) });
+export const attemptSchema = z.object({ id: z.string(), status: z.enum(['pending', 'complete', 'error']), code: z.string().optional(), grantId: z.string().optional() });
+export type AttemptView = z.infer<typeof attemptSchema>;

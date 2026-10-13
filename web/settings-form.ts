@@ -32,13 +32,17 @@ export function connectionForm(entry?: Entry) {
   jira.append(link('Jira API 토큰 발급 ↗', 'https://id.atlassian.com/manage-profile/security/api-tokens'));
   field(jira, 'jira-site', 'Jira 사이트', entry ? initial.jira.site : '', { required: true, placeholder: 'https://your-site.atlassian.net' });
   field(jira, 'jira-project', '프로젝트 키', entry ? initial.jira.projectKey : '', { required: true, placeholder: '예: DEMO' });
+  if (initial.jira.oauthGrant) jira.append(tag('브라우저 로그인 연결', 'development'));
+  else {
   field(jira, 'jira-email', 'Atlassian 이메일', '', { secret: true, placeholder: entry?.saved.jiraEmail ? '저장됨 · 비워두면 유지' : 'you@example.com', help: '토큰을 발급한 계정의 이메일입니다. 저장된 값은 다시 표시하지 않습니다.' });
   field(jira, 'jira-token', 'Jira API 토큰', '', { secret: true, placeholder: entry?.saved.jiraToken ? '저장됨 · 비워두면 유지' : '발급한 토큰 붙여넣기' });
+  }
   field(jira, 'jira-cloud', 'Cloud ID (범위 지정 토큰 사용 시)', initial.jira.cloudId ?? '', { placeholder: '선택 사항 · UUID', help: '범위 지정 토큰에는 Cloud ID가 필요합니다. 일반 API 토큰이면 비워두세요.' });
   const github = section('GitHub', '선택 사항입니다. 관련 PR·커밋·검사 결과를 읽습니다.', '03');
   github.append(link('GitHub 조회용 토큰 발급 ↗', 'https://github.com/settings/personal-access-tokens/new'));
   field(github, 'github-repos', '연결할 저장소', initial.github.repositories.join('\n'), { multiline: true, placeholder: 'owner/repository\nowner/another-repository', help: '한 줄에 하나씩 입력하세요. 저장소 URL도 가능합니다. 비우면 GitHub를 연결하지 않습니다.' });
-  field(github, 'github-token', 'GitHub 토큰', '', { secret: true, placeholder: entry?.saved.githubToken ? '저장됨 · 비워두면 유지' : '발급한 토큰 붙여넣기', help: '선택한 저장소의 Metadata·Contents·Pull requests·Checks·Commit statuses 조회 권한을 사용하세요. 조직 승인이나 SSO 승인이 필요할 수 있습니다.' });
+  if (initial.github.oauthGrant) github.append(tag('브라우저 로그인 연결', 'development'));
+  else field(github, 'github-token', 'GitHub 토큰', '', { secret: true, placeholder: entry?.saved.githubToken ? '저장됨 · 비워두면 유지' : '발급한 토큰 붙여넣기', help: '선택한 저장소의 Metadata·Contents·Pull requests·Checks·Commit statuses 조회 권한을 사용하세요. 조직 승인이나 SSO 승인이 필요할 수 있습니다.' });
   const advanced = node('details', '', 'settings-card'); advanced.append(node('summary', '일정 규칙 · 선택 사항'));
   advanced.append(node('p', `CLI 프로젝트 ID: ${initial.id}`, 'small'));
   field(advanced, 'name-filter', '릴리스 이름에 포함할 글자', initial.releaseNameIncludes ?? '');
@@ -58,8 +62,8 @@ export function connectionForm(entry?: Entry) {
       const freeze = rule('freeze-days'), qa = rule('qa-days'), filter = value('name-filter'), cloudId = value('jira-cloud');
       return connectionInputSchema.parse({ revision, ...(entry ? { originalId: initial.id } : {}),
         project: { ...initial, name: value('connection-name'), timezone: value('timezone'),
-          jira: { site: site.startsWith('https://') ? site : `https://${site}`, projectKey: value('jira-project').toUpperCase(), ...(cloudId ? { cloudId } : {}) },
-          github: { repositories: value('github-repos').split(/[\n,]+/).filter(Boolean).map((v) => repo(v.trim())) },
+          jira: { ...(initial.jira.oauthGrant ? { oauthGrant: initial.jira.oauthGrant } : {}), site: site.startsWith('https://') ? site : `https://${site}`, projectKey: value('jira-project').toUpperCase(), ...(cloudId ? { cloudId } : {}) },
+          github: { ...(initial.github.oauthGrant ? { oauthGrant: initial.github.oauthGrant } : {}), repositories: value('github-repos').split(/[\n,]+/).filter(Boolean).map((v) => repo(v.trim())) },
           releaseNameIncludes: filter || undefined, rules: { ...(freeze ? { featureFreeze: freeze } : {}), ...(qa ? { qa } : {}) } },
         credentials: { ...(value('jira-email') ? { jiraEmail: value('jira-email') } : {}), ...(value('jira-token') ? { jiraToken: value('jira-token') } : {}), ...(value('github-token') ? { githubToken: value('github-token') } : {}) } });
     } };

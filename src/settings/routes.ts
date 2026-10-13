@@ -1,17 +1,21 @@
+import { oauthRoutes } from '../auth/routes.js';
+import { connectors } from '../sync.js';
+import { probeReaders } from './probe.js';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { randomUUID } from 'node:crypto';
 import { connectionInputSchema, removalSchema } from '../core/connection-model.js';
 import type { Runtime } from '../runtime.js';
-import { probeConnections, type Probe } from './probe.js';
+import { type Probe } from './probe.js';
 
-export function settingsRoutes(runtime: Runtime, probe: Probe = probeConnections) {
+export function settingsRoutes(runtime: Runtime, probe: Probe = (project, secret) => probeReaders(project, connectors(project, secret, (id, provider) => runtime.oauth.access(id, provider)))) {
   const routes = new Hono(), csrf = randomUUID();
   routes.use('*', bodyLimit({ maxSize: 64 * 1024, onError: (c) => c.json({ error: 'SETTINGS_BODY_TOO_LARGE' }, 413) }));
   routes.use('*', async (c, next) => {
     if (c.req.method !== 'GET' && c.req.header('X-Release-Settings') !== csrf) return c.json({ error: 'SETTINGS_TOKEN_REQUIRED' }, 403);
     await next();
   });
+  routes.route('/oauth', oauthRoutes(runtime));
   const view = async () => ({ ...await runtime.connections.view(), csrf });
   routes.get('/', async (c) => c.json(await view()));
   routes.post('/check', async (c) => c.json(await runtime.connections.check(connectionInputSchema.parse(await c.req.json()), probe)));

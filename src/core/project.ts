@@ -9,9 +9,9 @@ export const projectSchema = z.object({
   jira: z.object({
     site: z.url().refine((value) => /^https:\/\/[a-z0-9-]+\.atlassian\.net\/?$/.test(value)),
     projectKey: z.string().regex(/^[A-Z][A-Z0-9_]*$/), emailEnv: envName, tokenEnv: envName,
-    cloudId: z.uuid().optional(),
+    cloudId: z.uuid().optional(), oauthGrant: z.uuid().optional(),
   }),
-  github: z.object({ repositories: z.array(z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/)), tokenEnv: envName }),
+  github: z.object({ repositories: z.array(z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/)), tokenEnv: envName, oauthGrant: z.uuid().optional() }),
   ticketDates: z.object({ start: mapping.optional(), due: mapping.optional() }).default({}),
   releaseNameIncludes: z.string().optional(),
   rules: z.object({ featureFreeze: offset.optional(), qa: offset.optional() }).default({}),
@@ -21,6 +21,7 @@ export const projectSchema = z.object({
   }),
   staleAfterHours: z.number().positive().max(8760).default(24),
 }).superRefine((project, ctx) => {
+  if (project.jira.oauthGrant && !project.jira.cloudId) ctx.addIssue({ code: 'custom', message: 'OAuth requires Cloud ID' });
   const { featureFreeze, qa } = project.rules;
   if (featureFreeze && qa && featureFreeze.basis === qa.basis && featureFreeze.days > qa.days)
     ctx.addIssue({ code: 'custom', message: 'Feature freeze must precede QA' });

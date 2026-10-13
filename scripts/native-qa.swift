@@ -59,6 +59,8 @@ struct NativeQA {
                     try await Task.sleep(for: .milliseconds(50))
                 }
                 try check(heading == "연결 설정", "native-settings-loaded")
+                let loginCards = try await text(web, "String(document.querySelectorAll('.oauth-card').length)")
+                try check(loginCards == "2", "native-browser-login-cards")
                 let secrets = try await text(web, "Array.from(document.querySelectorAll('input[type=password]')).map(x=>x.value).join('')")
                 try check(secrets.isEmpty, "native-settings-no-credential-prefill")
                 if let path = ProcessInfo.processInfo.environment["QA_SETTINGS_IMAGE"] {
@@ -72,7 +74,7 @@ struct NativeQA {
                         try png.write(to: URL(fileURLWithPath: path))
                     }
                 }
-                _ = try await text(web, "Array.from(document.querySelectorAll('button')).find(x=>x.textContent==='연결 확인').click(); ''")
+                _ = try await text(web, "document.querySelector('.manual-connections').open=true; Array.from(document.querySelectorAll('button')).find(x=>x.textContent==='연결 확인').click(); ''")
                 var validation = ""
                 for _ in 0..<100 {
                     validation = try await text(web, "document.querySelector('#settings-status')?.textContent || ''")

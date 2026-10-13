@@ -16,6 +16,12 @@ export async function settingsSync(project: string) {
 }
 export async function errorMessage(error: unknown): Promise<string> {
   const messages: Record<string, string> = {
+    OAUTH_APP_REQUIRED: '최초 앱 등록 정보를 설정해 주세요.', OAUTH_IN_PROGRESS: '진행 중인 로그인을 완료하거나 취소해 주세요.',
+    OAUTH_CALLBACK_PORT_BUSY: '다른 창에서 로그인 중이거나 4318 포트를 사용 중입니다. 진행 중인 로그인을 마친 뒤 다시 시도하세요.',
+    OAUTH_REAUTHORIZE: '로그인이 만료되거나 해제됐습니다. 로그인 버튼으로 다시 연결하세요.', OAUTH_TOKEN_FAILED: '인증에 실패했습니다. 앱 등록 정보와 승인을 확인하고 다시 로그인하세요.',
+    OAUTH_DISCOVERY_FAILED: '대상 목록을 읽지 못했습니다. 승인 범위·앱 설치·조회 권한을 확인하고 다시 시도하세요.',
+    OAUTH_APP_REQUIRES_READ_ONLY: 'GitHub App에 쓰기 권한이 있습니다. 앱의 권한을 읽기 전용으로 변경해 주세요.',
+    OAUTH_BUSY: '다른 창에서 인증정보를 갱신 중입니다. 잠시 후 다시 시도하세요.',
     SETTINGS_CHANGED_RELOAD: '다른 화면에서 설정이 바뀌었습니다. 설정 다시 불러오기를 누른 뒤 다시 시도하세요.',
     SETTINGS_BUSY: '다른 화면에서 저장 중입니다. 잠시 후 다시 시도하세요.',
     CREDENTIAL_MISSING: 'Jira 이메일과 API 토큰을 입력해 주세요.', GITHUB_CREDENTIAL_MISSING: 'GitHub 토큰을 입력해 주세요.',

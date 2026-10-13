@@ -34,22 +34,21 @@ pnpm start
 
 ## 읽기 전용 계약
 
-연결 대상에 대한 버전·티켓·댓글·브랜치·PR 생성/수정, 상태 변경, 머지, 배포 실행은 제공하지 않습니다. 외부 HTTP 계층에는 허용된 조회 경로의 **GET만** 있습니다. UI·CLI·공통 API가 이 계층을 공유합니다.
+연결 대상에 대한 버전·티켓·댓글·브랜치·PR 생성/수정, 상태 변경, 머지, 배포 실행은 제공하지 않습니다. 업무 데이터 HTTP 계층에는 허용된 조회 경로의 **GET만** 있습니다. OAuth 인증 코드 교환·토큰 갱신에만 제공자의 인증 endpoint로 POST를 보냅니다. UI·CLI·공통 API가 이 계층을 공유합니다.
 
-로컬 설정, 캐시, 관측 스냅샷, 마지막 조회 시각 저장은 허용된 앱 내부 쓰기입니다. `POST /api/refresh`는 로컬 캐시 갱신이며 외부에는 GET만 보냅니다. 원본 수정은 링크로 이동한 Jira·GitHub에서 사용자가 직접 수행합니다.
+로컬 설정, 캐시, 관측 스냅샷, 마지막 조회 시각 저장은 허용된 앱 내부 쓰기입니다. `POST /api/refresh`는 로컬 캐시 갱신이며 업무 데이터는 GET으로 조회하며 필요하면 OAuth 토큰을 갱신합니다. 원본 수정은 링크로 이동한 Jira·GitHub에서 사용자가 직접 수행합니다.
 
 ## 실제 연동
 
 웹 상단 **연결 설정**, 또는 메뉴 막대 앱의 톱니바퀴 → **연결 설정…**을 누르세요. 두 화면은 같은 로컬 설정을 사용합니다. 터미널에서 JSON을 편집할 필요가 없습니다.
 
-1. 연결 이름·시간대, Jira 사이트·프로젝트 키를 입력합니다.
-2. **Jira API 토큰 발급**을 눌러 발급한 토큰과 해당 계정 이메일을 입력합니다. 범위 지정 토큰은 Cloud ID도 입력합니다.
-3. GitHub를 사용할 경우 저장소와 조회용 토큰을 입력합니다. 여러 저장소를 한 줄에 하나씩 넣을 수 있습니다.
-4. **연결 확인**으로 접근 여부를 확인하고 **저장하고 동기화**를 누릅니다. 저장 이후 조회가 실패해도 설정은 남으며 실패 안내가 표시됩니다.
+1. **Jira 로그인 / GitHub 로그인**을 눌러 기본 브라우저에서 로그인·조회 권한을 승인합니다.
+2. 설정 화면으로 돌아와 접근 가능한 Jira 사이트·프로젝트와 GitHub 저장소를 선택합니다.
+3. **선택한 대상으로 연결**을 누르면 저장 후 첫 일정을 동기화합니다. 앱·웹·CLI가 같은 로컬 인증을 사용합니다.
 
-토큰 발급·조직 승인은 서비스에서 사용자가 수행합니다. OAuth 자동 로그인은 제공하지 않으며 기존 gh 로그인이나 다른 앱의 Jira 인증을 가져오지 않습니다. 저장한 이메일·토큰은 다시 화면에 내려보내지 않고, 수정 시 비워두면 유지합니다. Jira 사이트나 Cloud ID를 바꾸면 인증정보를 다시 입력해야 합니다. **연결 해제**는 앱이 관리하는 로컬 연결·인증정보만 제거하며 원본·캐시는 변경하지 않습니다.
+**최초 한 번은 앱 소유자의 OAuth 앱 등록이 필요합니다.** 등록된 클라이언트·비밀키를 이 공개 저장소에 포함하지 않습니다. [앱 등록과 로그인 안내](docs/oauth.md)에 Jira/GitHub 등록 화면, callback URL, 최소 읽기 권한을 정리했습니다. 등록 이후에는 사용자 API 토큰을 복사할 필요가 없습니다. 앱은 기존 gh 로그인이나 다른 앱의 Jira 인증을 가져오지 않습니다.
 
-Jira는 프로젝트 Browse 및 티켓 조회 권한이 필요합니다. [API 토큰 공식 안내](https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/)에 따라 읽기 권한을 선택하세요. 범위 지정 토큰은 `https://api.atlassian.com/ex/jira/{cloudId}`를 사용합니다. [Cloud ID 확인 방법](https://support.atlassian.com/jira/kb/retrieve-my-atlassian-sites-cloud-id/)을 참고하세요. GitHub fine-grained 토큰에는 선택한 저장소의 **Metadata, Pull requests, Contents, Checks, Commit statuses: Read-only**를 사용합니다. [공식 권한 안내](https://docs.github.com/en/rest/authentication/permissions-required-for-fine-grained-personal-access-tokens)를 참고하세요. 관리자·쓰기 권한을 요구하지 않으며, 앱이 기존 토큰의 권한 자체를 축소하지는 않습니다.
+기존 토큰 방식은 **저장된 연결 관리 · 고급 수동 설정** 안에서 사용할 수 있습니다. 저장된 이메일·토큰은 다시 화면에 내려보내지 않고 수정 시 비워두면 유지합니다. OAuth 로그인 정보 삭제는 연결 해제와 별개이며 다른 연결에서도 같은 로그인을 사용할 수 있습니다.
 
 연결 설정의 **일정 규칙**에서 릴리스 이름 필터·기능 마감·QA 오프셋을 설정할 수 있고 CLI용 프로젝트 ID를 확인할 수 있습니다. 여러 서비스는 연결을 나누고 이름 필터를 지정하세요. 등록한 설정은 앱·웹·CLI에 공유되며 일반 조회는 캐시를 읽습니다. 원본 조회는 저장 직후 또는 새로고침/`sync`로 실행합니다.
 
@@ -99,6 +98,7 @@ GitHub 첫 수집은 지정 저장소의 PR을 전 페이지 읽기 때문에 �
 
 - 기본 데이터: `~/.local/share/release-calendar/`
 - 변경: `--data-dir <path>` 또는 `RELEASE_CALENDAR_DATA_DIR`
+- OAuth 앱 등록 정보·로그인 토큰: `~/.config/release-calendar/connections.json.oauth.json` (0600, 평문). [삭제와 인증 제한](docs/oauth.md)을 참고하세요.
 - 화면에서 저장한 연결·인증정보: `~/.config/release-calendar/connections.json` (0600, 평문). 앱·웹·CLI가 공유합니다.
 - 고급 설정: `--config <path>` 또는 기본 `~/.config/release-calendar/config.json`. 명시한 경로의 UI 설정은 `<path>.connections.json`에 저장됩니다. 관리 파일이 기존 JSON보다 우선합니다.
 - 이전 방식의 `credentials.json`은 이관 후에도 남습니다. 완전히 제거하려면 기존 파일과 환경변수도 직접 정리하세요.

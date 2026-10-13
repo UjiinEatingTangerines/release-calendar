@@ -1,3 +1,4 @@
+import { oauthPanel } from './oauth-panel.js';
 import './style.css';
 import './settings.css';
 import { node, button, tag } from './dom.js';
@@ -9,6 +10,7 @@ const root = document.getElementById('app'); if (!root) throw new Error('Missing
 const app = root;
 let view: SettingsView | undefined, selected = '', busy = false, dirty = false;
 let notice = '', outcome: 'success' | 'error' | '' = '';
+let oauth: ReturnType<typeof oauthPanel> | undefined;
 let editor: ReturnType<typeof connectionForm> | undefined;
 function select(id: string) {
   if (busy || (dirty && !confirm('입력 중인 내용을 버리고 이동할까요?'))) return;
@@ -20,7 +22,7 @@ function status(text: string, kind: typeof outcome = '') {
 }
 function lock(value: boolean) {
   busy = value;
-  for (const control of app.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('button,input,select,textarea')) control.disabled = value;
+  for (const control of app.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('.manual-connections button,.manual-connections input,.manual-connections select,.manual-connections textarea')) control.disabled = value;
 }
 async function perform(action: 'save' | 'check') {
   if (!view || !editor || busy || !editor.form.reportValidity()) return;
@@ -55,11 +57,20 @@ async function reload() {
   finally { lock(false); }
 }
 function render() {
+  const manualExpanded = app.querySelector<HTMLDetailsElement>('.manual-connections')?.open ?? false;
+  oauth?.dispose();
   const page = node('main', '', 'settings-page');
   const header = node('header', '', 'header'); const title = node('div');
-  title.append(node('p', 'RELEASE CALENDAR', 'eyebrow'), node('h1', '연결 설정'), node('p', '연결 정보를 입력하면 달력과 메뉴 막대에 함께 반영됩니다.', 'muted'));
+  title.append(node('p', 'RELEASE CALENDAR', 'eyebrow'), node('h1', '연결 설정'), node('p', '로그인으로 연결하면 달력과 메뉴 막대에 함께 반영됩니다.', 'muted'));
   const back = node('a', '캘린더 열기 ↗', 'settings-back'); back.href = '/'; back.target = '_blank'; back.rel = 'noopener noreferrer'; header.append(title, back); page.append(header);
   const privacy = node('div', '', 'settings-privacy'); privacy.append(tag('이 Mac에만 저장', 'development'), tag('Jira · GitHub 조회 전용', 'qa'), node('p', '토큰은 로컬 파일에 저장되며 공개 저장소에 올라가지 않습니다. 저장된 토큰은 화면에 다시 표시하지 않습니다.', 'small')); page.append(privacy);
+  if (view?.projects.length) {
+    const connected = node('div', '', 'settings-privacy'); connected.append(node('strong', '연결된 프로젝트'));
+    for (const item of view.projects) { const target = node('a', item.project.name, 'tag development'); target.href = `/?${new URLSearchParams({ project: item.project.id })}`; target.target = '_blank'; target.rel = 'noopener noreferrer'; connected.append(target); }
+    page.append(connected);
+  }
+  if (view) { oauth = oauthPanel(view.csrf, () => void reload()); page.append(oauth.element); }
+  const legacy = node('details', '', 'manual-connections'); legacy.open = manualExpanded; legacy.append(node('summary', '저장된 연결 관리 · 고급 수동 설정'));
   const layout = node('div', '', 'settings-layout'); const list = node('aside', '', 'settings-list'); list.setAttribute('aria-label', '저장된 연결');
   list.append(node('h2', '내 연결'), button('＋ 연결 추가', () => select(''), 'primary'));
   for (const item of view?.projects ?? []) {
@@ -78,7 +89,7 @@ function render() {
   actions.append(button('연결 확인', () => void perform('check')), button('저장하고 동기화', () => void perform('save'), 'primary'));
   if (entry) actions.append(button('연결 해제', () => void remove(), 'danger-action'));
   editor.form.append(region, actions); content.append(editor.form, node('p', '로컬 인증 파일은 암호화되지 않습니다. 이 Mac의 사용자 계정 권한으로 보호하며, 원본 업무 데이터를 변경하는 기능은 없습니다.', 'small'));
-  layout.append(content); page.append(layout); app.replaceChildren(page);
+  layout.append(content); legacy.append(layout); page.append(legacy); app.replaceChildren(page);
 }
 window.addEventListener('beforeunload', (event) => { if (dirty) event.preventDefault(); });
 render(); lock(true);

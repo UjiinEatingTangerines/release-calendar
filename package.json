@@ -17,6 +17,7 @@
     "start": "node dist/cli.js serve",
     "cli": "node dist/cli.js",
     "format": "biome format --write src tests web",
+    "test:oauth": "pnpm build && node scripts/oauth-qa.mjs",
     "test:settings": "pnpm build && node scripts/settings-qa.mjs",
     "test:browser": "node scripts/browser-qa.mjs",
     "desktop:build": "pnpm build && node scripts/build-macos.mjs",

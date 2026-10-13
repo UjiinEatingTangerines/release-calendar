@@ -54,14 +54,15 @@ export class Connections {
       github: { ...input.project.github, tokenEnv: `${prefix}_GITHUB_TOKEN` },
     });
     const sourceChanged = previous && (previous.jira.site.replace(/\/$/, '') !== project.jira.site.replace(/\/$/, '') || previous.jira.cloudId !== project.jira.cloudId);
-    if (sourceChanged && (!input.credentials.jiraEmail || !input.credentials.jiraToken)) throw new AppError('NEW_JIRA_CREDENTIALS_REQUIRED');
+    if (sourceChanged && !project.jira.oauthGrant && (!input.credentials.jiraEmail || !input.credentials.jiraToken)) throw new AppError('NEW_JIRA_CREDENTIALS_REQUIRED');
     const prior = (name: string | undefined) => name ? current.credentials[name] ?? process.env[name] : undefined;
     const credentials = { ...current.credentials };
     const values = [input.credentials.jiraEmail ?? prior(previous?.jira.emailEnv), input.credentials.jiraToken ?? prior(previous?.jira.tokenEnv), input.credentials.githubToken ?? prior(previous?.github.tokenEnv)];
     names(project).forEach((name, index) => { const value = values[index]; if (value) credentials[name] = value; });
-    if (!credentials[project.jira.emailEnv] || !credentials[project.jira.tokenEnv]) throw new AppError('CREDENTIAL_MISSING');
-    if (project.github.repositories.length && !credentials[project.github.tokenEnv]) throw new AppError('GITHUB_CREDENTIAL_MISSING');
-    if (!project.github.repositories.length) delete credentials[project.github.tokenEnv];
+    if (!project.jira.oauthGrant && (!credentials[project.jira.emailEnv] || !credentials[project.jira.tokenEnv])) throw new AppError('CREDENTIAL_MISSING');
+    if (project.github.repositories.length && !project.github.oauthGrant && !credentials[project.github.tokenEnv]) throw new AppError('GITHUB_CREDENTIAL_MISSING');
+    if (!project.github.repositories.length || project.github.oauthGrant) delete credentials[project.github.tokenEnv];
+    if (project.jira.oauthGrant) { delete credentials[project.jira.emailEnv]; delete credentials[project.jira.tokenEnv]; }
     return { project, credentials };
   }
   async check(input: ConnectionInput, probe: Probe = probeConnections) {

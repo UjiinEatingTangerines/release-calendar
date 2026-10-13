@@ -60,7 +60,7 @@ export function startServer(runtime: Runtime, port: number) {
   const server = serve({ fetch: createApp(runtime).fetch, hostname: '127.0.0.1', port }, (info) => {
     process.stdout.write(`Release Calendar: http://127.0.0.1:${info.port} (${runtime.demo ? 'demo' : 'live'})\nStop: Ctrl+C\n`);
   });
-  const stop = () => { server.close(); if (server instanceof Server) server.closeAllConnections(); };
+  const stop = () => { runtime.oauth.close(); server.close(); if (server instanceof Server) server.closeAllConnections(); };
   process.once('SIGINT', stop); process.once('SIGTERM', stop);
   return server;
 }
