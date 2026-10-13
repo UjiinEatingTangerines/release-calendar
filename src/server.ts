@@ -1,3 +1,4 @@
+import { startAutoSync } from './auto-sync.js';
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import { serve } from '@hono/node-server';
@@ -60,7 +61,10 @@ export function startServer(runtime: Runtime, port: number) {
   const server = serve({ fetch: createApp(runtime).fetch, hostname: '127.0.0.1', port }, (info) => {
     process.stdout.write(`Release Calendar: http://127.0.0.1:${info.port} (${runtime.demo ? 'demo' : 'live'})\nStop: Ctrl+C\n`);
   });
-  const stop = () => { runtime.oauth.close(); server.close(); if (server instanceof Server) server.closeAllConnections(); };
+  const stopSync = startAutoSync(() => runtime.syncAll());
+  server.once('close', stopSync);
+  server.once('error', stopSync);
+  const stop = () => { stopSync(); void runtime.shutdown().finally(() => { server.close(); if (server instanceof Server) server.closeAllConnections(); }); };
   process.once('SIGINT', stop); process.once('SIGTERM', stop);
   return server;
 }

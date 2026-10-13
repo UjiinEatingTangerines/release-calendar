@@ -62,7 +62,7 @@ try {
     const popupEvent = context.waitForEvent('page');
     await card.getByRole('button', { name: `${label} 로그인`, exact: true }).click();
     const popup = await popupEvent;
-    await popup.waitForURL(provider === 'jira' ? 'https://mcp.atlassian.com/**' : 'https://github.com/**');
+    await popup.waitForURL(provider === 'jira' ? 'https://auth.atlassian.com/**' : 'https://github.com/**');
     if (provider === 'jira') {
       const state = new URL(popup.url()).searchParams.get('state'); assert.ok(state);
       await popup.goto(`${runtime.oauth.callback(provider)}?state=${state}&code=fictional-code`);

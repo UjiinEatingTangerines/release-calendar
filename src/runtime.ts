@@ -1,5 +1,6 @@
 import type { z } from 'zod';
 import { defaultDataDir, type Project } from './config.js';
+import type { State } from './core/model.js';
 import { AppError } from './core/model.js';
 import { Queries } from './core/query.js';
 import { demoState } from './demo.js';
@@ -13,6 +14,8 @@ import { connectors, syncProject } from './sync.js';
 export type RuntimeOptions = { readonly githubBrowser?: GithubBrowser; readonly oauthTransport?: OAuthTransport; readonly oauthPort?: number; readonly config?: string | undefined; readonly settingsPath?: string | undefined; readonly dataDir?: string | undefined; readonly demo?: boolean | undefined; readonly demoAt?: string | undefined };
 export class Runtime {
   readonly oauth: OAuth;
+  private readonly syncAbort = new AbortController();
+  private readonly syncing = new Map<string, Promise<State>>();
   private constructor(readonly connections: Connections, readonly options: RuntimeOptions) { this.oauth = new OAuth(`${connections.store.path}.oauth.json`, options.oauthTransport, options.oauthPort, options.githubBrowser); }
   get config() { return this.connections.config; }
   get demo() { return this.connections.demo; }
@@ -28,12 +31,12 @@ export class Runtime {
     return project;
   }
   readers(project: Project, resolveSecret = this.connections.resolveSecret) {
-    const clients = connectors(project, resolveSecret, (id, provider) => this.oauth.access(id, provider));
+    const clients = connectors(project, resolveSecret, (id, provider) => this.oauth.access(id, provider), this.syncAbort.signal);
     const { oauthGrant, cloudId, projectKey } = project.jira;
     if (!oauthGrant || !cloudId) return clients;
     const fallback = clients.jira();
     return { ...clients, jira: () => ({ get: async <T>(path: string, schema: z.ZodType<T>) => {
-      const reader = await this.oauth.isMcp(oauthGrant) ? this.oauth.jiraReader(oauthGrant, cloudId, projectKey) : fallback;
+      const reader = await this.oauth.isMcp(oauthGrant) ? this.oauth.jiraReader(oauthGrant, cloudId, projectKey, this.syncAbort.signal) : fallback;
       return reader.get(path, schema);
     } }) };
   }
@@ -43,7 +46,30 @@ export class Runtime {
     const now = this.options.demoAt ? new Date(`${this.options.demoAt}T03:00:00Z`) : new Date();
     const store = new Store(this.options.dataDir ?? defaultDataDir(), project);
     const clients = this.readers(project);
-    const state = this.demo ? demoState(now) : refresh ? await syncProject(project, store, { clients, now }) : await store.read();
+    const state = this.demo ? demoState(now) : refresh ? await this.sync(project, store, clients, now) : await store.read();
     return new Queries(project, state, now);
   }
+  private sync(project: Project, store: Store, clients: ReturnType<Runtime['readers']>, now: Date) {
+    this.syncAbort.signal.throwIfAborted();
+    const key = store.path;
+    const existing = this.syncing.get(key);
+    if (existing) return existing;
+    const task = syncProject(project, store, { clients, now }).finally(() => this.syncing.delete(key));
+    this.syncing.set(key, task);
+    return task;
+  }
+  async shutdown() {
+    this.syncAbort.abort();
+    await Promise.allSettled([...this.syncing.values(), this.oauth.shutdown()]);
+  }
+  async syncAll() {
+    await this.connections.reload();
+    if (this.demo) return;
+    for (const project of this.config.projects) {
+      if (this.syncAbort.signal.aborted) return;
+      try { await this.queries(project.id, true); }
+      catch (error) { if (!(error instanceof Error)) throw error; process.stderr.write('AUTO_SYNC_PROJECT_FAILED\n'); }
+    }
+  }
+
 }

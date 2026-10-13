@@ -4,7 +4,7 @@ import { dateInZone, dateSchema } from '../core/dates.js';
 import { AppError, issueIdSchema, releaseIdSchema, type Release, type Ticket } from '../core/model.js';
 import type { Reader } from './http.js';
 
-const version = z.object({ id: z.string(), name: z.string(), released: z.boolean(), archived: z.boolean(), startDate: dateSchema.optional(), releaseDate: dateSchema.optional() });
+const version = z.object({ id: z.string().regex(/^\d+$/), name: z.string(), released: z.boolean(), archived: z.boolean(), startDate: dateSchema.optional(), releaseDate: dateSchema.optional() });
 const versionPage = z.object({ values: z.array(version), isLast: z.boolean(), startAt: z.number(), total: z.number().optional() });
 const issue = z.object({ id: z.string(), key: z.string(), fields: z.object({
   summary: z.string(), status: z.object({ name: z.string(), statusCategory: z.object({ key: z.string() }) }),
@@ -34,12 +34,14 @@ export async function collectJira(reader: Reader, project: Project): Promise<{ r
     startAt += page.values.length;
   }
   const tickets: Ticket[] = [];
+  if (!releases.length) return { releases, tickets };
+  const versionFilter = project.releaseNameIncludes ? `fixVersion in (${releases.map(r => r.versionId).join(',')})` : 'fixVersion IS NOT EMPTY';
   const tokens = new Set<string>();
   const issueIds = new Set<string>();
   let token: string | undefined;
   const fields = ['summary', 'status', 'assignee', 'fixVersions', project.ticketDates.start?.field, project.ticketDates.due?.field].filter((v) => v !== undefined);
   while (true) {
-    const params = new URLSearchParams({ jql: `project = ${identity.id} AND fixVersion IS NOT EMPTY ORDER BY id ASC`, maxResults: '100', fields: fields.join(',') });
+    const params = new URLSearchParams({ jql: `project = ${identity.id} AND ${versionFilter} ORDER BY id ASC`, maxResults: '100', fields: fields.join(',') });
     if (token) params.set('nextPageToken', token);
     const page = await reader.get(`/rest/api/3/search/jql?${params}`, issuePage);
     for (const item of page.issues) {

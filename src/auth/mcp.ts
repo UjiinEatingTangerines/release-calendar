@@ -9,12 +9,12 @@ export const mcpOrigin = 'https://mcp.atlassian.com';
 const allowedTools = new Set(['getAccessibleAtlassianResources', 'listJiraProjects', 'getJiraProjectVersions', 'searchJiraIssuesUsingJql']);
 const object = z.record(z.string(), z.unknown());
 /** A closed read-tool allowlist; transport POSTs never imply permission to mutate Jira. */
-export async function mcpRead(token: string, name: string, args: Record<string, unknown>, fetcher: typeof fetch = fetch): Promise<unknown> {
+export async function mcpRead(token: string, name: string, args: Record<string, unknown>, fetcher: typeof fetch = fetch, signal?: AbortSignal): Promise<unknown> {
   if (!allowedTools.has(name)) throw new AppError('READ_ENDPOINT_NOT_ALLOWED');
   const client = new McpClient({ name: 'release-calendar', version: '0.1.0' });
   const transport = new StreamableHTTPClientTransport(new URL(`${mcpOrigin}/v2/mcp?tools=all`), {
     requestInit: { headers: { Authorization: `Bearer ${token}` }, redirect: 'error' },
-    fetch: (input, init) => fetcher(input, { ...init, signal: AbortSignal.timeout(30000), redirect: 'error' }),
+    fetch: (input, init) => fetcher(input, { ...init, signal: AbortSignal.any([AbortSignal.timeout(30000), ...(signal ? [signal] : []), ...(init?.signal ? [init.signal] : [])]), redirect: 'error' }),
   });
   try {
     // SDK 1.x declares its sessionId getter wider than its own Transport interface.
@@ -43,11 +43,13 @@ export async function mcpRead(token: string, name: string, args: Record<string, 
     return JSON.parse(text) as unknown;
   } catch (error) {
     if (error instanceof AppError) throw error;
+    if (error instanceof Error && 'code' in error && error.code === 401) throw new AppError('OAUTH_REAUTHORIZE');
     throw new AppError('MCP_CONNECTION_FAILED');
   } finally { await client.close(); }
 }
 export function unwrap(value: unknown): unknown {
   const parsed = object.safeParse(value);
+  if (parsed.success && 'data' in parsed.data) return parsed.data['data'];
   if (parsed.success && 'result' in parsed.data) return parsed.data['result'];
   return value;
 }
@@ -55,7 +57,7 @@ export async function mcpProjects(call: (name: string, args: Record<string, unkn
   const items: { id: string; key: string; name: string }[] = [];
   const schema = z.object({ id: z.string(), key: z.string(), name: z.string() });
   for (let startAt = 0; ; ) {
-    const raw = unwrap(await call('listJiraProjects', { cloudId, startAt, maxResults: 100 }));
+    const raw = unwrap(await call('listJiraProjects', { cloudId, startAt, maxResults: 100, action: 'browse' }));
     const page = object.safeParse(raw);
     const values = z.array(schema).parse(Array.isArray(raw) ? raw : page.success ? page.data['values'] ?? page.data['projects'] : undefined);
     if (values.some(v => items.some(old => old.id === v.id))) throw new AppError('PAGINATION_LOOP');
@@ -81,8 +83,19 @@ export function mcpJiraReader(cloudId: string, projectKey: string, call: (name: 
       return schema.parse(raw);
     }
     if (url.pathname === '/rest/api/3/search/jql') {
-      const raw = unwrap(await call('searchJiraIssuesUsingJql', { cloudId, jql: url.searchParams.get('jql'), fields: url.searchParams.get('fields')?.split(','), maxResults: 100, ...(url.searchParams.has('nextPageToken') ? { nextPageToken: url.searchParams.get('nextPageToken') } : {}) }));
-      return schema.parse(raw);
+      const raw = unwrap(await call('searchJiraIssuesUsingJql', { cloudId, view: 'full', jql: url.searchParams.get('jql'), fields: url.searchParams.get('fields')?.split(','), maxResults: 100, ...(url.searchParams.has('nextPageToken') ? { nextPageToken: url.searchParams.get('nextPageToken') } : {}) }));
+      const page = object.parse(raw);
+      const issues = z.array(object).parse(page['issues']).map(item => {
+        const fields = object.parse(item['fields']);
+        const custom = object.safeParse(fields['customFields']);
+        const mapped: Record<string, unknown> = {};
+        if (custom.success) for (const entry of Object.values(custom.data)) {
+          const field = z.object({ id: z.string(), value: z.unknown() }).safeParse(entry);
+          if (field.success) mapped[field.data.id] = field.data.value;
+        }
+        return { ...item, fields: { ...fields, ...mapped, assignee: fields['assignee'] ?? null } };
+      });
+      return schema.parse({ ...page, issues });
     }
     throw new AppError('READ_ENDPOINT_NOT_ALLOWED');
   } };

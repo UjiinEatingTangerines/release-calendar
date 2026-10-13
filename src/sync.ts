@@ -8,13 +8,14 @@ import { AppError, type Problem, type State } from './core/model.js';
 import { recordSnapshot, type Store } from './storage.js';
 
 export type Connectors = { readonly jira: () => Reader; readonly github: () => Reader };
-export function connectors(project: Project, resolveSecret: (name: string) => string = secret, oauth?: (id: string, provider: Provider) => Promise<string>): Connectors {
+export function connectors(project: Project, resolveSecret: (name: string) => string = secret, oauth?: (id: string, provider: Provider) => Promise<string>, signal?: AbortSignal): Connectors {
   const reader = (provider: Provider, base: string, id: string | undefined, fallback: () => string): Reader => ({
     async get(path, schema) {
+      signal?.throwIfAborted();
       let authorization: string;
       if (id) { if (!oauth) throw new AppError('OAUTH_REAUTHORIZE'); authorization = `Bearer ${await oauth(id, provider)}`; }
       else authorization = fallback();
-      return new HttpReader({ base, authorization, provider }).get(path, schema);
+      return new HttpReader({ base, authorization, provider, ...(signal ? { signal } : {}) }).get(path, schema);
     },
   });
   return {

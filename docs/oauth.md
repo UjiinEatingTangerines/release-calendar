@@ -4,14 +4,14 @@
 
 ## Jira Cloud: 입력 없는 브라우저 로그인
 
-1. **Jira 로그인**을 누릅니다. 앱이 공식 Atlassian MCP에 공개 OAuth 클라이언트를 자동 등록합니다. Client ID·secret을 입력하지 않습니다.
+1. **Jira 로그인**을 누릅니다. 앱이 공개 클라이언트 메타데이터(CIMD)를 사용해 공식 Atlassian MCP v2 인증을 시작합니다. Client ID·secret을 입력하지 않습니다.
 2. 기본 브라우저에서 계정과 사이트를 확인하고 조회 권한을 승인합니다.
 3. 설정 창으로 돌아와 **로그인 사용** 또는 자동으로 표시된 사이트·프로젝트 목록을 선택합니다.
 4. **선택한 대상으로 연결**을 누르면 실제 릴리스와 티켓을 조회합니다.
 
 앱에 저장된 로그인은 재사용하며, 갱신 토큰이 있으면 자동 갱신합니다. 최초 동의와 만료 후 재승인은 사용자가 브라우저에서 수행합니다. Codex/Claude의 MCP 토큰이나 브라우저 쿠키를 추출하지 않으며 다른 앱의 인증 상태를 바꾸지 않습니다. 기존에 저장한 3LO 연결은 유지됩니다.
 
-공식 MCP의 동적 클라이언트 등록과 authorization-code + PKCE S256을 사용합니다. 요청 범위는 `read:jira:agent-interface search:jira:agent-interface offline_access`입니다. 조직의 앱 허용 정책과 조회 권한이 적용됩니다. 이 경로는 REST API용 토큰으로 가장하지 않고 MCP 읽기 도구로 조회합니다. [인증 안내](https://developer.atlassian.com/cloud/rovo-mcp/guides/authentication-and-authorization/)와 [지원 도구](https://developer.atlassian.com/cloud/rovo-mcp/guides/supported-tools/)를 참고하세요.
+공식 MCP v2가 안내하는 auth.atlassian.com의 authorization-code + PKCE S256을 사용합니다. 공개 oauth-client.json은 기존 GitHub 저장소에서 제공하며 사용자 데이터나 비밀키를 포함하지 않습니다. 구형 v1 연결은 설정에서 다시 로그인해야 합니다. 요청 범위는 `read:jira:agent-interface search:jira:agent-interface offline_access`입니다. 조직의 앱 허용 정책과 조회 권한이 적용됩니다. 이 경로는 REST API용 토큰으로 가장하지 않고 MCP 읽기 도구로 조회합니다. [인증 안내](https://developer.atlassian.com/cloud/rovo-mcp/guides/authentication-and-authorization/)와 [지원 도구](https://developer.atlassian.com/cloud/rovo-mcp/guides/supported-tools/)를 참고하세요.
 
 ## GitHub.com: GitHub CLI 브라우저 인증
 

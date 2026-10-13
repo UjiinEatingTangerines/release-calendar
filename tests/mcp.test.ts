@@ -12,7 +12,7 @@ import { demoProject } from '../src/demo.js';
 const cloud = '11111111-1111-4111-8111-111111111111';
 
 describe('Atlassian browser connection', () => {
-  it('registers a public client automatically and exchanges a bound PKCE callback without a secret', async () => {
+  it('uses a public metadata client and exchanges a bound PKCE callback without a secret', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'release-mcp-'));
     const reservation = createServer(); await new Promise<void>(resolve => reservation.listen(0, '127.0.0.1', resolve));
     const address = reservation.address(); if (!address || typeof address === 'string') throw new Error('No port');
@@ -27,13 +27,14 @@ describe('Atlassian browser connection', () => {
       expect((await oauth.view()).apps.jira).toBe(true);
       const pending = await oauth.start('jira');
       const url = new URL(pending.url);
-      expect(url.origin).toBe('https://mcp.atlassian.com');
+      expect(url.origin).toBe('https://auth.atlassian.com');
       expect(url.searchParams.get('code_challenge_method')).toBe('S256');
       expect(url.searchParams.get('scope')).not.toMatch(/write|delete|manage/);
       const response = await fetch(`${oauth.callback('jira')}?state=${url.searchParams.get('state')}&code=fictional`);
       expect(response.status).toBe(200);
-      expect(await calls[0]?.json()).toMatchObject({ token_endpoint_auth_method: 'none', redirect_uris: [oauth.callback('jira')] });
-      const exchanged = new URLSearchParams(await calls[1]?.text());
+      expect(calls[0]?.url).toBe('https://auth.atlassian.com/oauth/token');
+      const exchanged = new URLSearchParams(await calls[0]?.text());
+      expect(exchanged.get('resource')).toBe('https://mcp.atlassian.com/v2/mcp');
       expect(exchanged.has('client_secret')).toBe(false);
       expect(exchanged.get('code_verifier')).toBeTruthy();
       const completed = oauth.status(pending.id);
@@ -45,6 +46,33 @@ describe('Atlassian browser connection', () => {
       expect(await reopened.access(completed.grantId, 'jira')).toBe('fictional-access');
       expect(await readFile(join(dir, 'auth.json'), 'utf8')).not.toContain('client_secret');
     } finally { oauth.close(); await rm(dir, { recursive: true, force: true }); }
+  });
+  it('marks legacy MCP grants for reconnect without sending their token to v2', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'release-legacy-'));
+    const oauth = new OAuth(join(dir, 'auth.json'));
+    const id = '11111111-1111-4111-8111-111111111112';
+    try {
+      await oauth.store.update(async doc => ({ ...doc, clients: { jira: { clientId: 'old', clientSecret: '', kind: 'mcp' } }, grants: [{ id, provider: 'jira', accessToken: 'old-token', createdAt: new Date().toISOString() }] }));
+      expect((await oauth.view()).grants[0]?.reconnect).toBe(true);
+      await expect(oauth.access(id, 'jira')).rejects.toMatchObject({ code: 'OAUTH_REAUTHORIZE' });
+    } finally { oauth.close(); await rm(dir, { recursive: true, force: true }); }
+  });
+  it('unwraps v2 data envelopes without losing pagination', async () => {
+    const result = await mcpProjects(async (_name, args) => ({ data: { values: [{ id: String(args['startAt']), key: 'DEMO', name: 'Fictional' }], isLast: args['startAt'] === 1 } }), cloud);
+    expect(result.map(item => item.id)).toEqual(['0', '1']);
+  });
+  it('cancels an in-flight provider request when the app shuts down', async () => {
+    const abort = new AbortController();
+    let entered: () => void = () => {};
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const result = mcpRead('fictional', 'getAccessibleAtlassianResources', {}, async (_input, init) => {
+      entered();
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+      });
+    }, abort.signal);
+    const rejected = expect(result).rejects.toMatchObject({ code: 'MCP_CONNECTION_FAILED' });
+    await started; abort.abort(); await rejected;
   });
   it('never calls the provider for a mutation tool', async () => {
     let called = false;
@@ -92,6 +120,11 @@ describe('Atlassian browser connection', () => {
     });
     const data = await collectJira(reader, { ...demoProject, jira: { ...demoProject.jira, projectKey: 'ORBIT' } });
     expect(data.releases.map(r => [r.versionId, r.released, r.archived, r.releaseDate])).toEqual([['1', true, true, '2025-12-01'], ['2', false, false, '2028-02-29'], ['3', false, false, null]]);
+  });
+  it('restores provider custom field IDs and omitted null assignees for date mappings', async () => {
+    const reader = mcpJiraReader(cloud, 'ORBIT', async () => ({ data: { issues: [{ id: '1', fields: { customFields: { 'Start': { id: 'customfield_10015', value: '2027-03-01' } } } }], isLast: true } }));
+    const result = await reader.get('/rest/api/3/search/jql', z.object({ issues: z.array(z.object({ fields: z.object({ customfield_10015: z.string(), assignee: z.null() }) })) }));
+    expect(result.issues[0]?.fields).toEqual({ customfield_10015: '2027-03-01', assignee: null });
   });
   it('fails closed on incomplete issue pages instead of recording empty data', async () => {
     const reader = mcpJiraReader(cloud, 'ORBIT', async () => ({ issues: [] }));

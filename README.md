@@ -34,7 +34,7 @@ pnpm start
 
 ## 읽기 전용 계약
 
-연결 대상에 대한 버전·티켓·댓글·브랜치·PR 생성/수정, 상태 변경, 머지, 배포 실행은 제공하지 않습니다. REST 연결은 허용된 조회 경로의 GET만 사용합니다. Jira 브라우저 연결은 공식 Atlassian MCP의 허용된 읽기 도구만 호출합니다. MCP 조회 전송과 인증 앱 자동 등록·코드 교환·갱신에는 POST가 사용되지만 업무 데이터 변경은 허용하지 않습니다. UI·CLI·공통 API가 이 계층을 공유합니다.
+연결 대상에 대한 버전·티켓·댓글·브랜치·PR 생성/수정, 상태 변경, 머지, 배포 실행은 제공하지 않습니다. REST 연결은 허용된 조회 경로의 GET만 사용합니다. Jira 브라우저 연결은 공식 Atlassian MCP의 허용된 읽기 도구만 호출합니다. MCP 조회 전송과 인증 코드 교환·갱신에는 POST가 사용되지만 업무 데이터 변경은 허용하지 않습니다. UI·CLI·공통 API가 이 계층을 공유합니다.
 
 로컬 설정, 캐시, 관측 스냅샷, 마지막 조회 시각 저장은 허용된 앱 내부 쓰기입니다. `POST /api/refresh`는 로컬 캐시 갱신이며 업무 데이터는 GET으로 조회하며 필요하면 OAuth 토큰을 갱신합니다. 원본 수정은 링크로 이동한 Jira·GitHub에서 사용자가 직접 수행합니다.
 
@@ -46,7 +46,7 @@ pnpm start
 2. 설정 화면으로 돌아와 접근 가능한 Jira 사이트·프로젝트와 GitHub 저장소를 선택합니다.
 3. **선택한 대상으로 연결**을 누르면 저장 후 첫 일정을 동기화합니다. 앱·웹·CLI가 같은 로컬 인증을 사용합니다.
 
-**Jira는 앱 등록 정보 입력 없이 브라우저에서 로그인합니다.** 공식 Atlassian MCP에 공개 클라이언트를 자동 등록하고 PKCE로 승인받습니다. 이 앱에 저장된 인증은 다음 실행에서도 재사용합니다. Codex·Claude·브라우저의 다른 인증 저장소에서 토큰을 추출하거나 복사하지 않습니다. **GitHub도 Client ID·secret 입력 없이 브라우저에서 인증합니다.** 설치된 GitHub CLI(`gh`)로 일회용 코드를 발급받아 GitHub 화면에서 승인합니다. `gh`가 없으면 `brew install gh` 후 앱을 다시 실행하세요. GitHub CLI 승인 권한은 쓰기를 포함할 수 있지만 앱은 허용된 GET 조회만 수행합니다. 기존 터미널 계정 설정은 변경하지 않습니다. [제공자별 로그인 안내](docs/oauth.md)를 참고하세요.
+**Jira는 앱 등록 정보 입력 없이 브라우저에서 로그인합니다.** 공식 Atlassian MCP v2 인증 서버에서 공개 클라이언트 메타데이터(CIMD)와 PKCE로 승인받습니다. 이 앱에 저장된 인증은 다음 실행에서도 재사용합니다. Codex·Claude·브라우저의 다른 인증 저장소에서 토큰을 추출하거나 복사하지 않습니다. **GitHub도 Client ID·secret 입력 없이 브라우저에서 인증합니다.** 설치된 GitHub CLI(`gh`)로 일회용 코드를 발급받아 GitHub 화면에서 승인합니다. `gh`가 없으면 `brew install gh` 후 앱을 다시 실행하세요. GitHub CLI 승인 권한은 쓰기를 포함할 수 있지만 앱은 허용된 GET 조회만 수행합니다. 기존 터미널 계정 설정은 변경하지 않습니다. [제공자별 로그인 안내](docs/oauth.md)를 참고하세요.
 
 기존 토큰 방식은 **저장된 연결 관리 · 고급 수동 설정** 안에서 사용할 수 있습니다. 저장된 이메일·토큰은 다시 화면에 내려보내지 않고 수정 시 비워두면 유지합니다. OAuth 로그인 정보 삭제는 연결 해제와 별개이며 다른 연결에서도 같은 로그인을 사용할 수 있습니다.
 
@@ -125,3 +125,9 @@ pnpm test:settings
 **실제 Jira/개인 GitHub 데이터 연동은 시험하지 않았습니다.** 데모, 가상 HTTP 응답 계약, 실제 로컬 서버·CLI·브라우저를 검증했습니다. 테스트용 실제 티켓·버전·PR은 만들지 않았습니다. Jira Data Center, GitHub Enterprise, MCP 서버, 반복 슬롯, 다중 사용자·외부 배포는 첫 버전 범위 밖입니다.
 
 공식 API 근거: [Jira 프로젝트 버전](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-project-versions/), [Jira enhanced issue search](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-search/), [GitHub PR/commits](https://docs.github.com/en/rest/pulls/pulls), [GitHub checks](https://docs.github.com/en/rest/checks/runs), [GitHub commit statuses](https://docs.github.com/en/rest/commits/statuses), [Zod](https://zod.dev/api), [ky](https://github.com/sindresorhus/ky), [Hono Node.js](https://hono.dev/docs/getting-started/nodejs), [Vite](https://vite.dev/guide/).
+
+### 자동 동기화
+
+웹 서버와 메뉴 막대 앱은 시작 시, 그리고 조회가 끝난 뒤 5분마다 저장된 프로젝트를 동기화합니다. 앱/서버가 종료된 동안은 실행하지 않습니다. 수동 새로고침과 자동 조회는 같은 프로젝트·설정에서 진행 중인 요청을 공유합니다. 실패 시 마지막 정상 스냅샷을 유지하고 다음 주기에 다시 시도합니다. 웹은 15초마다 로컬 스냅샷을 확인하며 메뉴 막대는 60초마다 표시를 갱신합니다. CLI 조회 명령은 저장된 스냅샷만 읽고 `sync` 명령은 즉시 조회합니다.
+
+기존 Jira MCP v1 로그인은 v2에 사용할 수 없습니다. 설정에서 **다시 로그인**하면 연결 ID를 유지한 채 인증을 교체합니다. 인증정보를 다른 앱에서 복사하지 않습니다. 공개 `oauth-client.json`에는 앱 이름과 localhost 콜백 주소만 있으며 사용자 데이터나 인증정보는 없습니다. 개발 포크는 자신의 공개 메타데이터 URL과 콜백 주소를 등록해야 합니다.

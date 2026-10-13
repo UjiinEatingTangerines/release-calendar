@@ -11,7 +11,7 @@ describe('Real CLI and common HTTP surface', () => {
     const app = createApp(runtime);
     // When querying both public read surfaces.
     const response = await app.request('http://127.0.0.1/api/calendar?project=demo&month=2027-03');
-    const cli = execFileSync(process.execPath,['dist/cli.js','calendar','--project','demo','--month','2027-03','--demo-at','2027-03-10','--json'],{ encoding:'utf8' });
+    const cli = execFileSync(process.execPath,['dist/cli.js','calendar','--demo','--project','demo','--month','2027-03','--demo-at','2027-03-10','--json'],{ encoding:'utf8' });
     // Then the complete API contract matches and the externally expected QA date is present.
     const http: unknown = await response.json(); expect(JSON.parse(cli)).toEqual(http);
     const parsed = z.object({ events:z.array(z.object({ kind:z.string(),start:z.string(),title:z.string() })) }).parse(http);

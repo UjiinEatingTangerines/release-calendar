@@ -47,8 +47,8 @@ function render() {
   const notice = node('div', '', 'freshness'); notice.setAttribute('role','status');
   if (data) {
     const time = data.dataAsOf ? new Date(data.dataAsOf).toLocaleString('ko-KR', { timeZone: data.timezone }) : ko.pending;
-    notice.append(node('span', `${ko.latest}: ${time} · ${data.timezone}`));
-    for (const warning of data.warnings) notice.append(node('p', `주의 · ${warning}`, 'warning'));
+    notice.append(node('span', `${ko.latest}: ${time} · ${data.timezone}${projects.mode === 'live' ? ' · 자동 동기화: 시작 시 및 조회 완료 후 5분마다' : ''}`));
+    for (const warning of data.warnings) notice.append(node('p', `주의 · ${warning.includes('OAUTH_REAUTHORIZE') ? 'Jira 또는 GitHub 연결 설정에서 다시 로그인해 주세요.' : warning}`, 'warning'));
     if (!data.registeredFuturePlans) notice.append(node('p', `${ko.noPlans}. ${ko.noFuture}`, 'muted'));
   }
   if (loading) notice.append(node('p', '일정을 불러오는 중입니다.'));
@@ -112,3 +112,15 @@ window.addEventListener('focus', () => {
     } catch (failure) { if (!(failure instanceof Error)) throw failure; error = ko.failed; render(); }
   })();
 });
+
+// Poll local snapshots only; the server owns provider synchronization.
+window.setInterval(() => {
+  if (document.hidden || loading || refreshing || projects.mode !== 'live') return;
+  const serial = request, selected = project, selectedMonth = month;
+  void api.calendar(selected, selectedMonth).then(result => {
+    if (loading || refreshing || serial !== request || selected !== project || selectedMonth !== month) return;
+    if (JSON.stringify(result) === JSON.stringify(data)) return;
+    data = result; render();
+    if (detail) void selectRelease(detail.release.id);
+  }).catch((failure: unknown) => { if (!(failure instanceof Error)) throw failure; error = ko.failed; render(); });
+}, 15000);

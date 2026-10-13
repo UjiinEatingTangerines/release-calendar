@@ -19,7 +19,7 @@ export class OAuth {
   callback(provider: Provider) { return `http://127.0.0.1:${this.port}/callback/${provider}`; }
   async view() {
     const doc = await this.store.read();
-    return { apps: { jira: true, github: !!doc.clients.github || this.githubBrowser.available() }, callback: `http://127.0.0.1:${this.port}/callback/`, grants: doc.grants.map(g => ({ id: g.id, provider: g.provider, createdAt: g.createdAt, reconnect: !g.accessToken || (expired(g) && !g.refreshToken) })) };
+    return { apps: { jira: true, github: !!doc.clients.github || this.githubBrowser.available() }, callback: `http://127.0.0.1:${this.port}/callback/`, grants: doc.grants.map(g => ({ id: g.id, provider: g.provider, createdAt: g.createdAt, reconnect: (g.provider === 'jira' && doc.clients.jira?.kind === 'mcp') || !g.accessToken || (expired(g) && !g.refreshToken) })) };
   }
   async configure(provider: Provider, client: Client) {
     if (this.listener || this.githubAbort) throw new AppError('OAUTH_IN_PROGRESS');
@@ -28,6 +28,7 @@ export class OAuth {
   async forget(id: string) { await this.store.update(async doc => ({ ...doc, grants: doc.grants.map(g => g.id === id ? { id: g.id, provider: g.provider, createdAt: g.createdAt, accessToken: null } : g) })); }
   async access(id: string, provider: Provider): Promise<string> {
     const doc = await this.store.read(), grant = doc.grants.find(g => g.id === id && g.provider === provider);
+    if (provider === 'jira' && doc.clients.jira?.kind === 'mcp') throw new AppError('OAUTH_REAUTHORIZE');
     if (!grant?.accessToken) throw new AppError('OAUTH_REAUTHORIZE');
     if (!expired(grant)) return grant.accessToken;
     const updated = await this.store.update(async current => {
@@ -85,9 +86,9 @@ export class OAuth {
   async start(provider: Provider, replaceId?: string) {
     if (this.listener || this.githubAbort) throw new AppError('OAUTH_IN_PROGRESS');
     let current = await this.store.read();
-    if (provider === 'jira' && !current.clients.jira) {
+    if (provider === 'jira' && (!current.clients.jira || current.clients.jira.kind === 'mcp')) {
       const registered = await this.transport.registerJira(this.callback(provider));
-      current = await this.store.update(async doc => ({ ...doc, clients: { ...doc.clients, jira: doc.clients.jira ?? registered } }));
+      current = await this.store.update(async doc => ({ ...doc, clients: { ...doc.clients, jira: registered }, grants: doc.grants.map(g => g.provider === 'jira' ? { id: g.id, provider: g.provider, createdAt: g.createdAt, accessToken: null } : g) }));
     }
     const client = current.clients[provider];
     if (replaceId && !current.grants.some(g => g.id === replaceId && g.provider === provider)) throw new AppError('OAUTH_REAUTHORIZE');
@@ -107,7 +108,7 @@ export class OAuth {
         try {
           const code = url.searchParams.get('code');
           if (url.searchParams.has('error') || !code) throw new AppError('OAUTH_DENIED');
-          const tokens = await this.transport.token(provider, client, { grant_type: 'authorization_code', code, redirect_uri: this.callback(provider), ...(provider === 'github' || client.kind === 'mcp' ? { code_verifier: verifier } : {}) });
+          const tokens = await this.transport.token(provider, client, { grant_type: 'authorization_code', code, redirect_uri: this.callback(provider), ...(provider === 'github' || (client.kind === 'mcp' || client.kind === 'mcp-v2') ? { code_verifier: verifier } : {}) });
           const grantId = replaceId ?? randomUUID();
           await this.store.update(async doc => {
             if (this.status(id).status !== 'pending') throw new AppError('OAUTH_CANCELLED');
@@ -131,15 +132,15 @@ export class OAuth {
     this.timeout = setTimeout(() => { this.attempts.set(id, { id, status: 'error', code: 'OAUTH_EXPIRED' }); this.close(); }, 10 * 60 * 1000); this.timeout.unref();
     const url = new URL(provider === 'jira' ? (client.kind === 'mcp' ? `${mcpOrigin}/v1/authorize` : 'https://auth.atlassian.com/authorize') : 'https://github.com/login/oauth/authorize');
     url.search = new URLSearchParams({ client_id: client.clientId, redirect_uri: this.callback(provider), response_type: 'code', state,
-      ...(provider === 'jira' && client.kind === 'mcp' ? { scope: 'read:jira:agent-interface search:jira:agent-interface offline_access', resource: `${mcpOrigin}/v2/mcp`, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256' } : provider === 'jira' ? { audience: 'api.atlassian.com', scope: 'read:jira-work offline_access', prompt: 'consent' } : { scope: 'offline_access', code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256' }) }).toString();
+      ...(provider === 'jira' && (client.kind === 'mcp' || client.kind === 'mcp-v2') ? { scope: 'read:jira:agent-interface search:jira:agent-interface offline_access', resource: `${mcpOrigin}/v2/mcp`, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256' } : provider === 'jira' ? { audience: 'api.atlassian.com', scope: 'read:jira-work offline_access', prompt: 'consent' } : { scope: 'offline_access', code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256' }) }).toString();
     return { id, url: url.toString() };
   }
   async isMcp(grant: string) {
     const doc = await this.store.read();
-    return doc.clients.jira?.kind === 'mcp' && doc.grants.some(g => g.id === grant && g.provider === 'jira');
+    return (doc.clients.jira?.kind === 'mcp' || doc.clients.jira?.kind === 'mcp-v2') && doc.grants.some(g => g.id === grant && g.provider === 'jira');
   }
-  jiraReader(grant: string, cloudId: string, projectKey: string) {
-    return mcpJiraReader(cloudId, projectKey, async (name, args) => this.transport.mcp(await this.access(grant, 'jira'), name, args));
+  jiraReader(grant: string, cloudId: string, projectKey: string, signal?: AbortSignal) {
+    return mcpJiraReader(cloudId, projectKey, async (name, args) => { signal?.throwIfAborted(); return this.transport.mcp(await this.access(grant, 'jira'), name, args, signal); });
   }
   async sites(grant: string) {
     if (await this.isMcp(grant)) return z.array(siteSchema).parse(unwrap(await this.transport.mcp(await this.access(grant, 'jira'), 'getAccessibleAtlassianResources', {})));

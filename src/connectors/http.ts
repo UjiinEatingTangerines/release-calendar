@@ -7,10 +7,10 @@ const jiraPaths = [/^\/rest\/api\/3\/project\/[A-Z0-9_]+$/, /^\/rest\/api\/3\/pr
 const githubPaths = [/^\/repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\/pulls(?:\/\d+(?:\/commits)?)?|\/commits\/[A-Za-z0-9]+\/(?:check-runs|status))?$/];
 export class HttpReader implements Reader {
   private readonly client;
-  constructor(private readonly connection: { readonly base: string; readonly authorization: string; readonly provider: 'jira' | 'github'; readonly fetch?: typeof globalThis.fetch }) {
+  constructor(private readonly connection: { readonly base: string; readonly authorization: string; readonly provider: 'jira' | 'github'; readonly signal?: AbortSignal; readonly fetch?: typeof globalThis.fetch }) {
     this.client = ky.create({ headers: { Authorization: connection.authorization, Accept: 'application/json' },
       timeout: 15000, retry: { limit: 2, methods: ['get'], statusCodes: [429, 502, 503, 504], maxRetryAfter: 10000 },
-      redirect: 'error', ...(connection.fetch ? { fetch: connection.fetch } : {}) });
+      redirect: 'error', ...(connection.signal ? { signal: connection.signal } : {}), ...(connection.fetch ? { fetch: connection.fetch } : {}) });
   }
   async get<T>(path: string, schema: z.ZodType<T>): Promise<T> {
     const pathname = path.split('?')[0] ?? '';
