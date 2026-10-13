@@ -39,6 +39,12 @@ try {
   await page.goto(`${address}/settings.html`);
   for (const [provider, label] of [['jira', 'Jira'], ['github', 'GitHub']]) {
     const card = page.locator('.oauth-card').filter({ has: page.getByRole('heading', { name: label, exact: true }) });
+    const login = card.getByRole('button', { name: `${label} 로그인`, exact: true });
+    await login.waitFor();
+    assert.equal(await login.isDisabled(), true);
+    await login.hover();
+    assert.notEqual(await login.evaluate(el => getComputedStyle(el).cursor), 'wait', 'Unconfigured login must not look busy');
+    await card.getByText('로그인 준비가 필요합니다.', { exact: false }).waitFor();
     await card.locator('summary').click();
     await page.locator(`#oauth-${provider}-client`).fill('fictional-client');
     await page.locator(`#oauth-${provider}-secret`).fill('fictional-secret');

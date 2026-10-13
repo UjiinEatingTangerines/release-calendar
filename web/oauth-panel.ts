@@ -85,7 +85,11 @@ export function oauthPanel(csrf: string, saved: () => void) {
     for (const provider of ['jira', 'github'] as const) {
       const label = provider === 'jira' ? 'Jira' : 'GitHub', card = node('div', '', 'settings-card oauth-card');
       card.append(node('h3', label), tag(view?.apps[provider] ? '로그인 준비됨' : '앱 등록 필요', view?.apps[provider] ? 'development' : 'freeze'));
-      const signIn = button(`${label} 로그인`, () => void run(() => start(provider)), 'primary'); signIn.disabled = !view?.apps[provider] || !!pending; card.append(signIn);
+      const signIn = button(pending ? '브라우저 승인 대기 중' : `${label} 로그인`, () => void run(() => start(provider)), 'primary'); signIn.disabled = !view?.apps[provider] || !!pending; card.append(signIn);
+      if (view && !view.apps[provider]) {
+        const hint = node('p', '로그인 준비가 필요합니다. 아래 ‘최초 1회 · 앱 소유자 등록 설정’을 완료하면 로그인할 수 있습니다.', 'small');
+        hint.id = `oauth-${provider}-setup-hint`; signIn.setAttribute('aria-describedby', hint.id); card.append(hint);
+      }
       const grants = view?.grants.filter(g => g.provider === provider) ?? [];
       for (const grant of grants) {
         const use = button(`${label} 로그인 사용 · ${new Date(grant.createdAt).toLocaleString()}`, () => void run(async () => {
