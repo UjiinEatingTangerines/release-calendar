@@ -74,7 +74,7 @@ export function oauthPanel(csrf: string, saved: () => void) {
     }
   }
   async function start(provider: Provider, grantId?: string) {
-    if (starting || pending) return;
+    if (starting || pending || view?.grants.some(g => g.provider === provider && !g.reconnect)) return;
     starting = true; renderCards(); message('브라우저 로그인을 준비하고 있습니다…');
     try {
     const result = z.object({ id: z.string(), url: z.url(), userCode: z.string().optional() }).parse(await client.post('start', { json: { provider, ...(grantId ? { grantId } : {}) } }).json());
@@ -100,26 +100,26 @@ export function oauthPanel(csrf: string, saved: () => void) {
     cards.replaceChildren();
     for (const provider of ['jira', 'github'] as const) {
       const label = provider === 'jira' ? 'Jira' : 'GitHub', card = node('div', '', 'settings-card oauth-card');
-      card.append(node('h3', label), tag(view?.apps[provider] ? '로그인 준비됨' : provider === 'github' ? 'GitHub CLI 필요' : '확인 중', view?.apps[provider] ? 'development' : 'freeze'));
+      const grants = view?.grants.filter(g => g.provider === provider && !g.reconnect) ?? [];
+      const authenticated = grants.length > 0;
+      card.append(node('h3', label), tag(authenticated ? '로그인됨' : '로그아웃', authenticated ? 'development' : 'freeze'));
       const ready = !!view?.apps[provider];
-      const signIn = button(starting ? '로그인 준비 중…' : pending ? '브라우저 승인 대기 중' : ready ? `${label} 로그인` : `${label} 로그인 준비하기`, () => {
+      const signIn = button(authenticated ? `${label} 로그인됨` : starting ? '로그인 준비 중…' : pending ? '브라우저 승인 대기 중' : ready ? `${label} 로그인` : `${label} 로그인 준비하기`, () => {
         if (ready) { void run(() => start(provider)); return; }
         message('GitHub CLI(gh)를 설치한 뒤 앱을 다시 시작하세요. 아래 설치 안내를 확인하세요.', true);
       }, 'primary');
-      signIn.disabled = !view || !!pending || starting; card.append(signIn);
+      signIn.disabled = authenticated || !view || !!pending || starting; card.append(signIn);
       if (view && !view.apps[provider]) {
         const hint = node('p', 'GitHub CLI(gh)가 필요합니다. 설치 후 앱을 다시 시작하면 브라우저로 로그인할 수 있습니다.', 'small');
         card.append(link('GitHub CLI 설치 안내 ↗', 'https://cli.github.com/'));
         hint.id = `oauth-${provider}-setup-hint`; signIn.setAttribute('aria-describedby', hint.id); card.append(hint);
       }
-      const grants = view?.grants.filter(g => g.provider === provider) ?? [];
       for (const grant of grants) {
-        const use = button(`${label} ${grant.reconnect ? '로그인 필요' : '로그인 사용'} · ${new Date(grant.createdAt).toLocaleString()}`, () => void run(async () => {
+        const time = node('time', `인증 시각: ${new Date(grant.createdAt).toLocaleString()}`, 'small'); time.dateTime = grant.createdAt; card.append(time);
+        const use = button(`${label} 연결 대상 선택`, () => void run(async () => {
           if (provider === 'jira') { jiraGrant = grant.id; await loadSites(); } else { githubGrant = grant.id; await loadRepos(); }
         }));
-        use.disabled = grant.reconnect; card.append(use);
-        const reconnect = button(`${label} 다시 인증`, () => void run(() => start(provider, grant.id))); reconnect.disabled = !!pending || starting; card.append(reconnect);
-        if (grant.reconnect) card.append(tag('다시 로그인 필요', 'freeze'));
+        card.append(use);
         card.append(button('로컬 로그아웃', () => {
           if (!confirm('이 로그인을 사용하는 모든 연결에서 재인증이 필요합니다. 로컬 로그인 정보를 삭제할까요? 서비스의 앱 승인은 별도로 철회해야 합니다.')) return;
           void run(async () => { await client.post('forget', { json: { id: grant.id } }); if (jiraGrant === grant.id) { jiraGrant = ''; sites = []; projects = []; } if (githubGrant === grant.id) { githubGrant = ''; repositories = []; selectedRepos.clear(); } renderChoices(); await refresh(); message(`${label} 로컬 로그아웃을 완료했습니다. 다시 인증하면 기존 연결을 계속 사용할 수 있습니다.`); });

@@ -109,8 +109,12 @@ try {
   assert.ok(document.projects[0].jira.oauthGrant && document.projects[0].github.oauthGrant);
   assert.deepEqual(document.credentials, {});
   // Reauthorization must repair the existing grant, not strand the saved project on an old ID.
+  assert.equal(await page.getByRole('button', { name: 'GitHub 로그인됨', exact: true }).isDisabled(), true);
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('.oauth-card').nth(1).getByRole('button', { name: '로컬 로그아웃', exact: true }).click();
+  await page.getByRole('button', { name: 'GitHub 로그인', exact: true }).waitFor();
   const nextPopup = context.waitForEvent('page');
-  await page.getByRole('button', { name: 'GitHub 다시 인증', exact: true }).click();
+  await page.getByRole('button', { name: 'GitHub 로그인', exact: true }).click();
   const reconnect = await nextPopup; await reconnect.waitForURL('https://github.com/**');
   finishGithub(); await reconnect.close();
   await page.getByRole('status').filter({ hasText: '로그인했습니다.' }).waitFor();
