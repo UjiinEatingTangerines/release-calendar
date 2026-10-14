@@ -36,6 +36,7 @@ struct ServerReady: Decodable { let url: String }
 
 func phaseLabel(_ phase: String) -> String {
     switch phase {
+    case "planning": return "계획 기간 · 예상"
     case "development": return "개발 기간"
     case "qa": return "QA 예상 기간"
     case "frozen": return "기능 마감 이후 · 예상"
@@ -48,6 +49,7 @@ func phaseLabel(_ phase: String) -> String {
 }
 func deadlineLabel(_ kind: String) -> String {
     switch kind {
+    case "planning": return "계획 마감"
     case "freeze": return "기능 마감"
     case "qa": return "QA 시작"
     case "release": return "출시"

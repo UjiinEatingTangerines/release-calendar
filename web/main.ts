@@ -43,7 +43,7 @@ function render() {
   monthInput.addEventListener('change', () => { if (monthInput.value) { month = monthInput.value; expanded.clear(); void load(); } });
   nav.append(monthInput, today, previous, next); toolbar.append(title, nav); main.append(toolbar);
   const legend = node('div', '', 'legend'); legend.setAttribute('aria-label', ko.legend);
-  for (const kind of ['development','freeze','qa','release'] as const) legend.append(tag(`${ko.kinds[kind]}${kind === 'freeze' || kind === 'qa' ? ' · 예상' : ' · Jira'}`,kind)); main.append(legend);
+  for (const kind of ['planning','development','freeze','qa','release'] as const) legend.append(tag(`${ko.kinds[kind]}${kind !== 'release' ? ' · 예상' : ' · Jira'}`,kind)); main.append(legend);
   const notice = node('div', '', 'freshness'); notice.setAttribute('role','status');
   if (data) {
     const time = data.dataAsOf ? new Date(data.dataAsOf).toLocaleString('ko-KR', { timeZone: data.timezone }) : ko.pending;

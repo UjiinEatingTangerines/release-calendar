@@ -46,11 +46,12 @@ export function connectionForm(entry?: Entry) {
   const advanced = node('details', '', 'settings-card'); advanced.append(node('summary', '일정 규칙 · 선택 사항'));
   advanced.append(node('p', `CLI 프로젝트 ID: ${initial.id}`, 'small'));
   field(advanced, 'name-filter', '릴리스 이름에 포함할 글자', initial.releaseNameIncludes ?? '');
+  field(advanced, 'planning-days', '시작일 기준 계획 일수', String(initial.rules.planning?.days ?? ''), { placeholder: '예: 3', help: '시작일을 포함합니다. 평일 기준은 주말만 제외하며 공휴일은 반영하지 않습니다.' });
   field(advanced, 'freeze-days', '기능 마감 · 배포일 기준 일수', String(initial.rules.featureFreeze?.days ?? ''), { placeholder: '예: -5' });
   field(advanced, 'qa-days', 'QA 시작 · 배포일 기준 일수', String(initial.rules.qa?.days ?? ''), { placeholder: '예: -3' });
   const basis = node('select'); basis.id = 'rule-basis';
   for (const [value, text] of [['weekdays', '평일 기준 (공휴일 제외 안 함)'], ['calendar', '달력일 기준']]) { const option = node('option', text); option.value = value ?? ''; basis.append(option); }
-  basis.value = initial.rules.qa?.basis ?? initial.rules.featureFreeze?.basis ?? 'weekdays'; const basisLabel = node('label', '일수 계산 방식'); basisLabel.htmlFor = basis.id; advanced.append(basisLabel, basis);
+  basis.value = initial.rules.qa?.basis ?? initial.rules.featureFreeze?.basis ?? initial.rules.planning?.basis ?? 'weekdays'; const basisLabel = node('label', '일수 계산 방식'); basisLabel.htmlFor = basis.id; advanced.append(basisLabel, basis);
   form.append(advanced);
   let basisChanged = false; basis.addEventListener('change', () => { basisChanged = true; });
   const value = (key: string) => inputs.get(key)?.value.trim() ?? '';
@@ -58,13 +59,13 @@ export function connectionForm(entry?: Entry) {
     read: (revision: string): ConnectionInput => {
       const site = value('jira-site').replace(/\/$/, '');
       const repo = (text: string) => text.replace(/^https:\/\/github\.com\//, '').replace(/\/$/, '');
-      const rule = (key: string) => { const previous = key === 'freeze-days' ? initial.rules.featureFreeze : initial.rules.qa; return value(key) ? { days: Number(value(key)), basis: !basisChanged && previous ? previous.basis : basis.value } : undefined; };
-      const freeze = rule('freeze-days'), qa = rule('qa-days'), filter = value('name-filter'), cloudId = value('jira-cloud');
+      const rule = (key: string) => { const previous = key === 'planning-days' ? initial.rules.planning : key === 'freeze-days' ? initial.rules.featureFreeze : initial.rules.qa; return value(key) ? { days: Number(value(key)), basis: !basisChanged && previous ? previous.basis : basis.value } : undefined; };
+      const planning = rule('planning-days'), freeze = rule('freeze-days'), qa = rule('qa-days'), filter = value('name-filter'), cloudId = value('jira-cloud');
       return connectionInputSchema.parse({ revision, ...(entry ? { originalId: initial.id } : {}),
         project: { ...initial, name: value('connection-name'), timezone: value('timezone'),
           jira: { ...(initial.jira.oauthGrant ? { oauthGrant: initial.jira.oauthGrant } : {}), site: site.startsWith('https://') ? site : `https://${site}`, projectKey: value('jira-project').toUpperCase(), ...(cloudId ? { cloudId } : {}) },
           github: { ...(initial.github.oauthGrant ? { oauthGrant: initial.github.oauthGrant } : {}), repositories: value('github-repos').split(/[\n,]+/).filter(Boolean).map((v) => repo(v.trim())) },
-          releaseNameIncludes: filter || undefined, rules: { ...(freeze ? { featureFreeze: freeze } : {}), ...(qa ? { qa } : {}) } },
+          releaseNameIncludes: filter || undefined, rules: { ...(planning ? { planning } : {}), ...(freeze ? { featureFreeze: freeze } : {}), ...(qa ? { qa } : {}) } },
         credentials: { ...(value('jira-email') ? { jiraEmail: value('jira-email') } : {}), ...(value('jira-token') ? { jiraToken: value('jira-token') } : {}), ...(value('github-token') ? { githubToken: value('github-token') } : {}) } });
     } };
 }

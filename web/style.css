@@ -74,3 +74,5 @@ footer { margin-top:var(--space-8); font-size:var(--text-meta); color:var(--mute
 
 .provider-failures { display:flex; flex-wrap:wrap; gap:var(--space-2); margin-top:var(--space-2); }
 .tag.provider-failure { color:var(--danger); background:var(--danger-bg); }
+
+.planning { color:var(--muted); background:var(--selected); }

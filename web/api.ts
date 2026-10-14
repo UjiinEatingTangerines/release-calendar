@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { dateSchema } from '../src/core/dates.js';
 import { releaseSchema, ticketSchema, pullSchema } from '../src/core/model.js';
 
-export const eventSchema = z.object({ id: z.string(), releaseId: z.string(), title: z.string(), kind: z.enum(['development', 'freeze', 'qa', 'release', 'ticket']),
+export const eventSchema = z.object({ id: z.string(), releaseId: z.string(), title: z.string(), kind: z.enum(['planning', 'development', 'freeze', 'qa', 'release', 'ticket']),
   start: dateSchema, end: dateSchema, source: z.enum(['jira','rule']), sourceDetail: z.string(), url: z.string() });
 const statusSchema = z.object({ project: z.string(), projectName: z.string(), timezone: z.string(), today: dateSchema,
   dataAsOf: z.string().nullable(), githubAsOf: z.string().nullable(), firstObservedAt: z.string().nullable(),

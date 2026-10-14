@@ -1,8 +1,8 @@
 import type { Project } from '../config.js';
-import { addDays, monthDays, offsetDate, type LocalDate } from './dates.js';
+import { addDays, monthDays, offsetDate, weekday, type LocalDate } from './dates.js';
 import { AppError, type Release, type Snapshot } from './model.js';
 
-export type EventKind = 'development' | 'freeze' | 'qa' | 'release' | 'ticket';
+export type EventKind = 'planning' | 'development' | 'freeze' | 'qa' | 'release' | 'ticket';
 export type CalendarEvent = {
   readonly id: string; readonly releaseId: string; readonly title: string; readonly kind: EventKind;
   readonly start: LocalDate; readonly end: LocalDate; readonly source: 'jira' | 'rule';
@@ -12,15 +12,27 @@ export function milestones(release: Release, project: Project) {
   const date = release.releaseDate;
   const freeze = date && project.rules.featureFreeze ? offsetDate(date, project.rules.featureFreeze) : null;
   const qa = date && project.rules.qa ? offsetDate(date, project.rules.qa) : null;
-  return { freeze, qa, valid: !(freeze && qa && freeze > qa) };
+  const rule = project.rules.planning;
+  let planningStart = rule ? release.startDate : null;
+  if (planningStart && rule?.basis === 'weekdays') {
+    while (weekday(planningStart) >= 5) planningStart = addDays(planningStart, 1);
+  }
+  const planningEnd = planningStart && rule ? offsetDate(planningStart, { ...rule, days: rule.days - 1 }) : null;
+  const developmentStart = planningEnd && rule ? offsetDate(planningEnd, { ...rule, days: 1 }) : release.startDate;
+  const developmentEnd = freeze ?? (qa ? addDays(qa, -1) : date);
+  return { freeze, qa, planningStart, planningEnd, developmentStart, developmentEnd,
+    valid: !(freeze && qa && freeze > qa) && !(planningEnd && developmentEnd && planningEnd >= developmentEnd) };
+
 }
 export function schedule(snapshot: Snapshot, project: Project): readonly CalendarEvent[] {
   const events: CalendarEvent[] = [];
   for (const release of snapshot.releases) {
-    const { freeze, qa, valid } = milestones(release, project);
+    const { freeze, qa, planningStart, planningEnd, developmentStart, developmentEnd, valid } = milestones(release, project);
     const base = { releaseId: release.id, title: release.name, url: release.url };
-    if (release.startDate && release.releaseDate && release.startDate <= release.releaseDate)
-      events.push({ ...base, id: `${release.id}:development`, kind: 'development', start: release.startDate, end: release.releaseDate, source: 'jira', sourceDetail: 'Jira version.startDate → releaseDate (release window, not ticket duration)' });
+    if (valid && planningStart && planningEnd)
+      events.push({ ...base, id: `${release.id}:planning`, kind: 'planning', start: planningStart, end: planningEnd, source: 'rule', sourceDetail: `Jira version.startDate + planning rule ${JSON.stringify(project.rules.planning)}; holidays not applied` });
+    if (valid && developmentStart && developmentEnd && developmentStart <= developmentEnd)
+      events.push({ ...base, id: `${release.id}:development`, kind: 'development', start: developmentStart, end: developmentEnd, source: project.rules.planning || freeze || qa ? 'rule' : 'jira', sourceDetail: 'Release start after configured planning period → feature freeze (inclusive), otherwise before QA or release date; not ticket duration' });
     if (release.releaseDate)
       events.push({ ...base, id: `${release.id}:release`, kind: 'release', start: release.releaseDate, end: release.releaseDate, source: 'jira', sourceDetail: 'Jira version.releaseDate; deployment success unknown' });
     if (valid) {

@@ -3,7 +3,7 @@ export const ko = {
   project: '프로젝트', release: '릴리스', all: '모든 릴리스', today: '오늘', previous: '이전 달', next: '다음 달',
   refresh: '새로고침', refreshing: '조회 중…', tickets: '티켓 일정 표시', undated: '배포일 미정',
   legend: '일정 범례', weekdays: ['월', '화', '수', '목', '금', '토', '일'],
-  kinds: { development: '개발 기간', freeze: '기능 마감', qa: 'QA', release: '배포 예정일', ticket: '티켓 일정' },
+  kinds: { planning: '계획 기간', development: '개발 기간', freeze: '기능 마감', qa: 'QA', release: '배포 예정일', ticket: '티켓 일정' },
   sources: { jira: 'Jira', rule: '예상' }, detail: '릴리스 상세', select: '일정을 선택하세요',
   selectHelp: '기간 막대나 배포일을 선택하면 포함 티켓과 개발 정보를 이곳에서 확인할 수 있습니다.',
   noSchedule: '개별 일정 없음', noTickets: '조회된 포함 티켓 없음', noPulls: '관련 PR 연결 없음 / 미확인',

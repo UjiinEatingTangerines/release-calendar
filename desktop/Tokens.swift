@@ -22,6 +22,7 @@ enum Palette {
     static let radius: CGFloat = 12
     static func tint(_ phase: String) -> Color {
         switch phase {
+        case "planning": return teal
         case "development": return blue
         case "qa": return purple
         case "frozen": return amber
@@ -32,6 +33,7 @@ enum Palette {
     }
     static func symbol(_ phase: String) -> String {
         switch phase {
+        case "planning": return "list.bullet.clipboard"
         case "development": return "hammer"
         case "qa": return "checklist"
         case "frozen": return "lock"
