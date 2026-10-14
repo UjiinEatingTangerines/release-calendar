@@ -71,3 +71,6 @@ footer { margin-top:var(--space-8); font-size:var(--text-meta); color:var(--mute
 @media (prefers-reduced-motion:reduce) { * { scroll-behavior:auto; transition:none; } }
 
 .header-actions { display:flex; align-items:center; gap:var(--space-3); flex-wrap:wrap; }
+
+.provider-failures { display:flex; flex-wrap:wrap; gap:var(--space-2); margin-top:var(--space-2); }
+.tag.provider-failure { color:var(--danger); background:var(--danger-bg); }

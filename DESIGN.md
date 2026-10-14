@@ -128,3 +128,5 @@ Jira is ready for browser sign-in without owner fields. Its card explains browse
 Provider authentication cards refresh from server state after login and logout. Signed-out cards expose only one sign-in action and no stale authentication timestamp or logout action. Signed-in cards show a semantic connected badge, a disabled sign-in action, a separately labeled authentication timestamp, resource selection, and local logout; no redundant reauthorize action is offered. Pending authorization remains cancellable after reopening settings.
 
 Codex-backed Jira cards identify the shared authentication owner. The timestamp is labeled connection verification time, never the original Codex sign-in time. Reuse completes without a browser; missing authentication opens Codex consent. Local logout clearly states that Codex remains signed in.
+
+Provider failures appear as deduplicated `Jira 조회 실패` / `GitHub 조회 실패` text badges above the warning copy. Web uses danger tokens; native uses the existing amber warning palette and SF Symbol. Generic stale/empty warnings do not imply a provider failure. Successful refresh removes resolved badges.

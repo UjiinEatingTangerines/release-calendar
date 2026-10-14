@@ -28,6 +28,16 @@ struct PopoverView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     if let message { notice(message, symbol: loading ? "arrow.triangle.2.circlepath" : "exclamationmark.triangle", color: loading ? Palette.muted : Palette.amber) }
                     if let summary {
+                        if summary.warnings.contains(where: { $0.hasPrefix("jira:") || $0.hasPrefix("github:") }) {
+                            HStack(spacing: 8) {
+                                if summary.warnings.contains(where: { $0.hasPrefix("jira:") }) {
+                                    StatusBadge(text: "Jira 조회 실패", color: Palette.amber, symbol: "exclamationmark.triangle.fill")
+                                }
+                                if summary.warnings.contains(where: { $0.hasPrefix("github:") }) {
+                                    StatusBadge(text: "GitHub 조회 실패", color: Palette.amber, symbol: "exclamationmark.triangle.fill")
+                                }
+                            }
+                        }
                         if !summary.warnings.isEmpty { notice(warningText(summary.warnings), symbol: "exclamationmark.triangle.fill", color: Palette.amber).help(summary.warnings.joined(separator: ", ")) }
                         HStack {
                             Text("릴리스 일정").font(.system(size: 12, weight: .semibold))

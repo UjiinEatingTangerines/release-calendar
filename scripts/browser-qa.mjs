@@ -86,6 +86,32 @@ try {
   await page.getByRole('button',{ name:'새로고침',exact:true }).click();
   await page.getByRole('button',{ name:'새로고침',exact:true }).waitFor();
   results.push('Unbounded past navigation, empty month, Today and refresh');
+  let warnings = [];
+  await page.route('**/api/calendar?**', async route => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...await response.json(), warnings } });
+  });
+  for (const [codes, labels] of [
+    [['jira:CODEX_RPC_FAILED'], ['Jira 조회 실패']],
+    [['github:HTTP_503'], ['GitHub 조회 실패']],
+    [['jira:HTTP_401', 'github:HTTP_503', 'jira:TIMEOUT'], ['Jira 조회 실패', 'GitHub 조회 실패']],
+    [['STALE_OR_MISSING_DATA'], []],
+    [[], []],
+  ]) {
+    warnings = codes;
+    await page.reload();
+    await page.locator('.calendar').waitFor();
+    assert.deepEqual(await page.locator('.provider-failure').allTextContents(), labels);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    if (labels.length === 2) {
+      await page.screenshot({ path: 'artifacts/provider-failures-mobile.png', fullPage: true });
+      await page.setViewportSize({ width: 1440, height: 1100 });
+      await page.screenshot({ path: 'artifacts/provider-failures-desktop.png', fullPage: true });
+      await page.setViewportSize({ width: 390, height: 844 });
+    }
+  }
+  results.push('Provider failure badges: Jira only, GitHub only, both deduplicated, stale only, recovery clears badges');
+  await page.unroute('**/api/calendar?**');
   await page.route('**/api/calendar?**', (route) => route.fulfill({ status:503,body:'Unavailable' }));
   await page.getByRole('button',{ name:'다음 달',exact:true }).click();
   await page.locator('.error').waitFor();

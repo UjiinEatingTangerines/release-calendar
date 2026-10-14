@@ -48,6 +48,11 @@ function render() {
   if (data) {
     const time = data.dataAsOf ? new Date(data.dataAsOf).toLocaleString('ko-KR', { timeZone: data.timezone }) : ko.pending;
     notice.append(node('span', `${ko.latest}: ${time} · ${data.timezone}${projects.mode === 'live' ? ' · 자동 동기화: 시작 시 및 조회 완료 후 5분마다' : ''}`));
+    const failures = node('div', '', 'provider-failures');
+    for (const [provider, label] of [['jira', 'Jira'], ['github', 'GitHub']] as const) {
+      if (data.warnings.some(warning => warning.startsWith(`${provider}:`))) failures.append(tag(`${label} 조회 실패`, 'provider-failure'));
+    }
+    if (failures.childElementCount) notice.append(failures);
     for (const warning of data.warnings) notice.append(node('p', `주의 · ${warning.includes('OAUTH_REAUTHORIZE') ? 'Jira 또는 GitHub 연결 설정에서 다시 로그인해 주세요.' : warning}`, 'warning'));
     if (!data.registeredFuturePlans) notice.append(node('p', `${ko.noPlans}. ${ko.noFuture}`, 'muted'));
   }
