@@ -1,3 +1,4 @@
+import { diagnostics, diagnosticScope, diagnosticReason } from './diagnostics.js';
 import type { Project } from './config.js';
 import type { Provider } from './auth/model.js';
 import { secret } from './config.js';
@@ -25,13 +26,15 @@ export function connectors(project: Project, resolveSecret: (name: string) => st
   };
 }
 export async function syncProject(project: Project, store: Store, input: { readonly clients: Connectors; readonly now: Date }): Promise<State> {
-  return store.update(async (previous) => {
+  return diagnosticScope(project.id, () => store.update(async (previous) => {
+    const started = Date.now(); diagnostics.record({ event: 'sync_start' });
     const observedAt = input.now.toISOString();
     const problems: Problem[] = [];
     let jira;
     try { jira = await collectJira(input.clients.jira(), project); }
     catch (error) {
       if (!(error instanceof Error)) throw error;
+      diagnostics.record({ event: 'sync_failed', provider: 'jira', stage: 'collect', reason: diagnosticReason(error instanceof AppError ? error.code : ''), preserved: !!previous.current, lastGoodAt: previous.current?.observedAt ?? null, elapsedMs: Date.now() - started });
       return { ...previous, lastAttemptAt: observedAt, problems: [{ provider: 'jira', code: error instanceof AppError ? error.code : 'RESPONSE_INVALID' }] };
     }
     let pulls = previous.current?.pulls ?? [];
@@ -41,8 +44,11 @@ export async function syncProject(project: Project, store: Store, input: { reado
       githubObservedAt = observedAt;
     } catch (error) {
       if (!(error instanceof Error)) throw error;
+      diagnostics.record({ event: 'sync_failed', provider: 'github', stage: 'collect', reason: diagnosticReason(error instanceof AppError ? error.code : ''), preserved: !!previous.current, lastGoodAt: githubObservedAt, elapsedMs: Date.now() - started });
       problems.push({ provider: 'github', code: error instanceof AppError ? error.code : 'RESPONSE_INVALID' });
     }
+    diagnostics.record({ event: 'sync_success', provider: 'jira', elapsedMs: Date.now() - started });
+    if (!problems.length) diagnostics.record({ event: 'sync_success', provider: 'github', elapsedMs: Date.now() - started });
     return { ...recordSnapshot(previous, { ...jira, pulls, observedAt, githubObservedAt }), lastAttemptAt: observedAt, problems };
-  });
+  }));
 }

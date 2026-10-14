@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { diagnostics, diagnosticReason, bindDiagnostic } from '../diagnostics.js';
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { accessSync, constants } from 'node:fs';
@@ -10,7 +12,8 @@ const messageSchema = z.object({ id: z.number().optional(), method: z.string().o
 export class CodexRpc {
   private child: ChildProcessWithoutNullStreams | undefined;
   private sequence = 0;
-  private pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+  private sessionId = randomUUID();
+  private pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout>; failed: (value: unknown) => void }>();
   onNotification: (method: string, params: unknown) => void = () => {};
   constructor(private readonly executable = findCodex(), private readonly prefix: string[] = []) {}
   available() { return !!this.executable; }
@@ -19,10 +22,22 @@ export class CodexRpc {
     await this.ensureServer(this.executable);
     const child = spawn(this.executable, [...this.prefix, 'app-server', '--stdio', '-c', 'mcp_servers={atlassian={url="https://mcp.atlassian.com/v2/mcp",enabled_tools=["getAccessibleAtlassianResources","searchJiraIssuesUsingJql","listJiraProjects","getJiraProjectVersions","executeRead"]}}', '-c', 'features.apps=false'], { cwd: tmpdir(), stdio: 'pipe', windowsHide: true });
     this.child = child;
-    child.stderr.resume();
+    this.sessionId = randomUUID(); const sessionId = this.sessionId;
+    let buffer = ''; const reported = new Set<string>();
+    child.stderr.on('data', (chunk: Buffer) => {
+      buffer = (buffer + chunk.toString('utf8')).slice(-8192);
+      const lines = buffer.split('\n'); buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!/atlassian|oauth|refresh/i.test(line)) continue;
+        const reason = diagnosticReason(line);
+        if (reason === 'unknown' || reported.has(reason)) continue;
+        const oauthError = z.enum(['invalid_grant', 'unauthorized_client', 'invalid_token']).safeParse(line.match(/invalid_grant|unauthorized_client|invalid_token/i)?.[0]?.toLowerCase());
+        reported.add(reason); diagnostics.record({ event: 'auth_error', provider: 'jira', stage: /refresh/i.test(line) ? 'refresh' : 'other', reason, sessionId, ...(oauthError.success ? { oauthError: oauthError.data } : {}) });
+      }
+    });
     child.stdin.on('error', () => this.stop());
     child.on('error', () => this.stop());
-    child.on('exit', () => { if (this.child === child) this.stop(); });
+    child.on('exit', code => { diagnostics.record({ event: 'process_exit', sessionId, exitCode: code }); if (this.child === child) this.stop(); });
     const lines = createInterface({ input: child.stdout });
     lines.on('line', line => {
       try {
@@ -31,7 +46,7 @@ export class CodexRpc {
         if (m.id !== undefined && this.pending.has(m.id)) {
           const waiter = this.pending.get(m.id); if (!waiter) return;
           this.pending.delete(m.id); clearTimeout(waiter.timer);
-          if (m.error !== undefined) waiter.reject(new AppError('CODEX_RPC_FAILED')); else waiter.resolve(m.result);
+          if (m.error !== undefined) { waiter.failed(m.error); waiter.reject(new AppError('CODEX_RPC_FAILED')); } else waiter.resolve(m.result);
         } else if (m.id !== undefined && m.method) {
           child.stdin.write(JSON.stringify({ id: m.id, error: { code: -32601, message: 'Interactive tool requests are not supported' } }) + '\n');
         } else if (m.method) this.onNotification(m.method, m.params);
@@ -62,8 +77,15 @@ export class CodexRpc {
     const child = this.child; if (!child) return Promise.reject(new AppError('CODEX_CONNECTION_FAILED'));
     return new Promise((resolve, reject) => {
       const id = ++this.sequence;
-      const timer = setTimeout(() => { this.pending.delete(id); reject(new AppError('CODEX_TIMEOUT')); this.stop(); }, 45000);
-      this.pending.set(id, { resolve, reject, timer });
+      const stage = ['initialize', 'thread/start', 'mcpServer/tool/call', 'mcpServer/oauth/login'].find(value => value === method) ?? 'other';
+      const tool = z.object({ tool: z.string(), arguments: z.object({ name: z.string().optional() }).passthrough().optional() }).safeParse(params);
+      const operation = z.enum(['getAccessibleAtlassianResources', 'listJiraProjects', 'getJiraProjectVersions', 'searchJiraIssuesUsingJql']).safeParse(tool.success ? tool.data.tool === 'executeRead' ? tool.data.arguments?.name : tool.data.tool : undefined);
+      const failed = bindDiagnostic((value: unknown) => {
+        const error = z.object({ code: z.number().int().optional(), message: z.string().optional() }).safeParse(value);
+        diagnostics.record({ event: 'rpc_failed', provider: 'jira', stage: stage as 'initialize' | 'thread/start' | 'mcpServer/tool/call' | 'mcpServer/oauth/login' | 'other', sessionId: this.sessionId, requestId: id, ...(operation.success ? { operation: operation.data } : {}), reason: diagnosticReason(error.success ? error.data.message ?? 'rpc' : 'rpc'), ...(error.success && error.data.code !== undefined ? { rpcCode: error.data.code } : {}) });
+      });
+      const timer = setTimeout(() => { failed({ message: 'timeout' }); this.pending.delete(id); reject(new AppError('CODEX_TIMEOUT')); this.stop(); }, 45000);
+      this.pending.set(id, { resolve, reject, timer, failed });
       child.stdin.write(JSON.stringify({ id, method, params }) + '\n');
     });
   }

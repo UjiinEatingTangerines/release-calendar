@@ -1,3 +1,4 @@
+import { diagnostics } from './diagnostics.js';
 import type { z } from 'zod';
 import { defaultDataDir, type Project } from './config.js';
 import type { State } from './core/model.js';
@@ -62,6 +63,7 @@ export class Runtime {
   async shutdown() {
     this.syncAbort.abort();
     await Promise.allSettled([...this.syncing.values(), this.oauth.shutdown()]);
+    await diagnostics.flush();
   }
   async syncAll() {
     await this.connections.reload();
